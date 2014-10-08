@@ -1,0 +1,66 @@
+ENTRY(BootStart)
+OUTPUT_FORMAT(elf64-x86-64)
+Start = 0x200000;
+SECTIONS
+     {
+		. = Start;
+		.Multiboot :
+		{
+			*(.Multiboot) 
+		} 
+		
+		.PML4 : ALIGN(0x1000)
+		{
+			*(.PML4) 
+		} 
+		
+		.PDPT : ALIGN(0x1000)
+		{
+			*(.PDPT) 
+		} 
+		
+		.PD : ALIGN(0x1000)
+		{
+			*(.PD) 
+		} 
+		. = ALIGN(4096);
+		KernelStart = .;
+		
+		.GDT :
+		{
+			*(.GDT)
+		}
+		
+		.ctors :
+		{
+			*(.ctor*)
+		}
+		
+		.dtors :
+		{
+			*(.dtor*)
+		}
+		
+		.text :
+		{
+			*(.text) 
+		}
+	
+		.rodata :
+		{ 
+			*(.rodata) 
+		}
+		
+		.data :
+		{
+			*(.data) 
+		}
+		
+		.bss :
+		{
+			*(.bss) 
+		}
+		. = ALIGN(4096);
+		KernelEnd = .;
+     }
+	 
