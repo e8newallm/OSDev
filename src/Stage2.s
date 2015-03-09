@@ -17,6 +17,9 @@ BootStart:
 	CLI
 	MOV %EBX, mbd
 
+	#Get CPUID data
+	
+	
 	#Make sure Paging is disabled
 	MOV %CR0, %EAX
 	AND $0b01111111111111111111111111111111, %EAX
@@ -46,6 +49,9 @@ BootStart:
 	MOV %CR0, %EAX
 	OR $0b10000000000000000000000000000001, %EAX
 	MOV %EAX, %CR0
+	
+	MOVL StackBase, %EBP
+	MOVL StackBase, %ESP
 	
 	LGDT (GDTPointer)
 	LJMP $0x0008, $Kernel_Start

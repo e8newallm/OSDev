@@ -1,9 +1,11 @@
 //TODO: Add an option into Malloc for small allocations (Allocate a separate frame for variables of that size, and use a bitmap to track)
+extern bool PrintString(const char* String, char Colour);
+extern char* LongToStringHexTemp(long Number);
 
 MemorySeg* FindFirstBlock(unsigned long Size)
 {	//TODO: Improve the efficiency
 	unsigned long SizeCheck = Size + sizeof(BlockHeader);
-	for(long Pos = 0; PhysMemory[Pos]->Usage != MEMORYSEG_EOM; Pos++)
+	for(long Pos = 0; PhysMemory[Pos] < PhysMemory.EOM(); Pos++)
 	{
 		if(PhysMemory[Pos]->LargestBlock >= SizeCheck && PhysMemory[Pos]->Usage == MEMORYSEG_INUSE)
 		{
@@ -16,9 +18,9 @@ MemorySeg* FindFirstBlock(unsigned long Size)
 MemorySeg* AllocateFrame()
 {
 	MemorySeg* MMapPointer = PhysMemory.FindFreePhyAddr();
-	if(MMapPointer->Usage == MEMORYSEG_EOM)
+	if(MMapPointer == PhysMemory.EOM())
 	{
-		Kernel_Panic("Out of Memory!");
+		//Kernel_Panic("Out of Memory!");
 	}
 	PhysMemory.UsePhyAddr(MMapPointer);
 	return MMapPointer;
@@ -48,7 +50,6 @@ void* AllocateBlock(unsigned int Size, MemorySeg* MemorySegment)
 		(long)Largest < MemorySegment->BaseAddress + PhysMemory.MemorySegSize;
 		Largest = (BlockHeader*)((long)Largest + Largest->Size + sizeof(BlockHeader)))
 	{
-		
 		if(!Largest->Usage && Largest->Size > MemorySegment->LargestBlock)
 		{
 			MemorySegment->LargestBlock = Largest->Size;
@@ -62,7 +63,7 @@ void* malloc(unsigned int Size)
 	if(Size + sizeof(BlockHeader) < PhysMemory.MemorySegSize)
 	{
 		MemorySeg* MemFrame = FindFirstBlock(Size);
-		if(MemFrame->Usage == BLOCKHEADER_EOB)
+		if(MemFrame == PhysMemory.EOM())
 		{
 			MemFrame = AllocateFrame();
 			BlockHeader* Block = (BlockHeader*)(MemFrame->BaseAddress);

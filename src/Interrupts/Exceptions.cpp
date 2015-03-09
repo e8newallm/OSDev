@@ -71,7 +71,7 @@ extern "C" void PageFaultExc()
 				 :
 				 :"eax");
 	PrintString("\r\nError with Paging: ", 0x0A);
-	PrintString(LongToStringHex(ErrorCode), 0x0A);
+	//PrintString(LongToStringHex(ErrorCode), 0x0A);
 	Kernel_Panic("Page fault error (0xE)");
 }
 

@@ -10,9 +10,6 @@ String::String()
 String::String(char* String)
 {
 	char* Pointer = String;
-	PrintString("\r\n\r\nPointer = ", 0x0A);
-	PrintString(LongToStringHex(this), 0x0A);
-	PrintString("\r\nString = |", 0x0A);
 	Length = 0;
 	while(*Pointer != (char)0)
 	{

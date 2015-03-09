@@ -47,6 +47,17 @@ bool PrintString(char* String, char Colour)
 	return 0;
 }
 
+bool PrintStringTest(char* String, char Colour)
+{
+	for(int j = 0; String[j] != 0; j++)
+	{
+			*((char*)VGAPos) = String[j];
+			*((char*)VGAPos+1) = Colour;
+			VGAPos += 2;
+	}
+	return 0;
+}
+
 bool PrintChar(char Char, char Colour)
 {
 	if(Char == (char)10)
@@ -86,14 +97,14 @@ bool PrintChar(char* Char, char colour)
 	return PrintChar(*Char, colour);
 }
 
-bool PrintString(String string, char Colour)
+/*bool PrintString(String string, char Colour)
 {
 	for(long i = 0; i < string.Length; i++)
 	{
 		PrintChar(string[i], Colour);
 	}
 	return 0;
-}
+}*/
 
 bool ScrollUp()
 {

@@ -43,6 +43,7 @@ class MemoryMap
 	MemorySeg* FindPhyAddr(void*);
 	MemorySeg* FindFreePhyAddr();
 	int UsePhyAddr(MemorySeg*, char);
+	void* UseFreePhyAddr(char);
 	int FreePhyAddr(MemorySeg*);
 	void Initialise(multiboot_info_t*, MemorySeg*, long);
 	long AddrToPos(void*);
@@ -56,6 +57,7 @@ MemorySeg* MemoryMap::operator[](unsigned long Position)
 		return (PhyMemMap+Size);
 	return (PhyMemMap+Position);
 }
+
 MemorySeg* MemoryMap::EOM()
 {
 	return (PhyMemMap+Size);
@@ -103,11 +105,11 @@ void MemoryMap::Initialise(multiboot_info_t* mbd, MemorySeg* Start, long MemSegL
 		}
 		mmap = (memory_map_t*)((long)mmap + (long)mmap->size + (long)sizeof(unsigned int));
 	}
-	CurrentMap->Usage = (char)0xFF;
-	MemorySeg* LoopChk = CurrentMap;
+	CurrentMap->Usage = MEMORYSEG_EOM;
+	MemorySeg* LoopChk = FindPhyAddr((long*)CurrentMap);
 	for(MemorySeg* Pointer = FindPhyAddr((long*)PhyMemMap); Pointer <= LoopChk; Pointer += 1)  //Setting memory map's memory blocks as in-use
 	{
-		UsePhyAddr(Pointer, 0x02);
+		UsePhyAddr(Pointer, MEMORYSEG_LOCKED);
 	}
 }
 
@@ -137,9 +139,19 @@ MemorySeg* MemoryMap::FindFreePhyAddr()
 	return (PhyMemMap+Size);
 }
 
+void* MemoryMap::UseFreePhyAddr(char MemUsage = MEMORYSEG_INUSE)
+{
+	MemorySeg* Block = FindFreePhyAddr();
+	if(UsePhyAddr(Block, MemUsage) == 0)
+	{
+		return (void*)Block->BaseAddress;
+	}
+	return (void*)0;
+}
+
 int MemoryMap::UsePhyAddr(MemorySeg* MemoryAddr, char MemUsage = MEMORYSEG_INUSE)
 {
-	if(AddrToPos(MemoryAddr) > Size || ((long)MemoryAddr - (long)PhyMemMap) % sizeof(MemorySeg) != 0x00) //Return -1 if MemoryAddr isn't a physical memory map entry
+	if(AddrToPos(MemoryAddr) >= Size || ((long)MemoryAddr - (long)PhyMemMap) % sizeof(MemorySeg) != 0x00) //Return -1 if MemoryAddr isn't a physical memory map entry
 	{
 		return -1;
 	}
@@ -159,7 +171,7 @@ int MemoryMap::FreePhyAddr(MemorySeg* MemoryAddr)
 	{
 		return -1;
 	}
-	if(MemoryAddr->Usage != MEMORYSEG_INUSE) //Return the current usage if memory block isn't in use
+	if(MemoryAddr->Usage != MEMORYSEG_INUSE || MemoryAddr->Usage != MEMORYSEG_LOCKED) //Return the current usage if memory block isn't in use
 	{
 		return MemoryAddr->Usage;
 	}
