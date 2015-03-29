@@ -1,14 +1,18 @@
 long TimeSinceStart;
 
+unsigned char Hex[17] = "0123456789ABCDEF";
+#include "IO.cpp"
+#include "Serial.cpp"
 #include "E820.h"
 #include "Memory/MemoryMap.cpp"
 #include "Memory/Paging.cpp"
 #include "Memory/Malloc.cpp"
 #include "BasicFunctions.cpp"
-#include "VGAText/VGA.cpp"
 
 #include "Keyboard.cpp"
-#include "IO.cpp"
+
+
+#include "Video/Video.cpp"
 
 #include "Miscellaneous/Miscellaneous.cpp"
 
@@ -17,46 +21,48 @@ long TimeSinceStart;
 
 int Header[12] __attribute__((section (".Multiboot"))) = 
 {
-	0x1BADB002, 0x00000000, -(0x1BADB002 + 0x00000000),
+	0x1BADB002, 0x00000004, -(0x1BADB002 + 0x00000004),
 	0x00000000, 0x00000000, 0x00000000,
 	0x00000000, 0x00000000, 0x00000000,
-	0x00000000, 0x00000000, 0x00000000
+	1024, 768, 24
 };
 
-short* volatile PML4 = (short*)&PML4Temp;
-char* volatile StackBase = (char*)0x001F000;
-char* volatile StackBottom = (char*)0x001D000;
-long extern KernelStart;
-long extern KernelEnd;
+
+short* PML4 = (short*)&PML4Temp;
+char* StackBase = (char*)0x001F000;
+char* StackBottom = (char*)0x001D000;
+char extern KernelStart;
+char extern KernelEnd;
 long* IDTPos;
 multiboot_info_t* mbd;
 MemoryMap PhysMemory;
 PageFile Paging;
+//SerialController Serial;
+unsigned short MemoryModel;
+long TestVar;
+char* BDA = (char*)0x400;
 /////////////////////KERNEL START///////////////////////////
 extern "C" void Kernel_Start()
 {
 	__asm__("PUSH %RAX; MOV $0x10, %RAX;MOV %RAX, %DS; MOV %RAX, %SS; POP %RAX"); 
 	
+	//Setup Serial ports
+	Serial.Setup(BDA);
+	Serial.WriteString(0x1, "Testing Serial Port!");
+	
 	//Setting up memory map
-	PrintString("Creating memory map...", 0x0A);
 	PhysMemory.Initialise(mbd, (MemorySeg*)&KernelEnd, 0x1000);
 	MemorySeg* LoopChk = PhysMemory.FindPhyAddr(&KernelEnd);
 	MemorySeg* KernelPointer;
+	
+	Serial.WriteString(0x1, "\r\nSetting Kernel memory blocks");
 	for(KernelPointer = PhysMemory.FindPhyAddr(0x0); KernelPointer <= LoopChk; KernelPointer++) //Setting Kernel memory blocks as in-use
 	{
 		PhysMemory.UsePhyAddr(KernelPointer, MEMORYSEG_LOCKED);
 	}
-
-	//Setting up Stack
-	PrintString(" [Done]\r\nSetting up stack...", 0x0A);
-	LoopChk = PhysMemory.FindPhyAddr((long*)StackBase);
-	for(MemorySeg* Position = PhysMemory.FindPhyAddr((long*)StackBottom); Position <= LoopChk; Position++)
-	{
-		PhysMemory.UsePhyAddr(Position, MEMORYSEG_LOCKED); //TODO: Check if memory segments in use, perhaps make the stack dynamically located
-	}
 	
+	Serial.WriteString(0x1, "\r\nSet up single IDT memory block");
 	//Setting up IDT
-	PrintString(" [Done]\r\nSetting up IDT...", 0x0A);
 	IDTPos = (long*)PhysMemory[PhysMemory.Size] + PhysMemory.MemorySegSize;
 	PhysMemory.UsePhyAddr(PhysMemory.FindPhyAddr(IDTPos), MEMORYSEG_LOCKED);
 	IDT = (IDTStruct*)IDTPos;
@@ -67,7 +73,7 @@ extern "C" void Kernel_Start()
 	IDT->Pointer.Limit = 0xFF * sizeof(IDTDescr) - 1;
 	IDT->Pointer.Base = (long*)IDT;
 	Pointer = (long*)&(IDT->Pointer);
-	PICMapping_Init(0x20, 0x28); //Initialise the PICs, Master mapped to 0x21 - 0x27, Slave mapped to 0x28 - 0x30
+	PICMapping_Init(0x20, 0x28); //Initialise the PICs, Master mapped to 0x20 - 0x27, Slave mapped to 0x28 - 0x30
 	
 	//Setting the exception gates
 	SetGate(0x00, &Exc0, 0b10001110);
@@ -99,20 +105,80 @@ extern "C" void Kernel_Start()
 	Output8(0x40, 0x0B); //Set lower byte
 	Output8(0x40, 0xE9); //set higher byte 
 	__asm__("MOV (Pointer), %eax; LIDT (%eax);sti");
-	PrintString(" [Done]\r\nSetting up keyboard...", 0x0A);
-	Output8(PICM_Dat, 0xFF);
+	Output8(PICM_Dat, 0xFC);
 	Output8(PICS_Dat, 0xFF);
 	
-	PrintString(" [Done]\r\n\r\nSetting up new paging...\r\n\r\n", 0x0A);
 	Paging.Initialise();
 	// 1:1 mapping for the first 10MB of memory
+	Serial.WriteString(0x1, "\r\nMap all remaining memory blocks in first 10MB\r\n");
+	for(MemorySeg* Position = PhysMemory.FindPhyAddr((void*)0x0); Position <= PhysMemory.FindPhyAddr((void*)0xA00000); Position++)
+	{
+		PhysMemory.UsePhyAddr(Position, MEMORYSEG_LOCKED); 
+	}
+	
 	for(unsigned long i = 0; i < 0xA00000; i += 0x1000)
 	{
 		Paging.MapAddress(i, i);
 	}
-	PrintString("\r\nSetup table. Activating it...", 0x0A);
+	
+	Serial.WriteString(0x1, "\r\nStarting Video setup");
+	
+	//Graphics setup
+	GUI = Video((vbe_mode_info_struct*)((long)mbd->vbe_mode_info));
+		
+	//Mapping Video memory starting at 0xA00000
+	unsigned long End = 0xA00000;
+	Serial.WriteString(0x1, "\r\nMap main video memory");
+	for(unsigned long i = 0; i < GUI.BytesPerLine * GUI.Height; i += 0x1000)
+	{
+		Paging.MapAddress(((unsigned long)GUI.FrameAddress + i), 0xA00000 + i);
+		End = 0xA00000 + i;
+	}
+	GUI.FrameAddress = (char*)0xA00000;
+	End += 0x1000;
+	GUI.SecondFrameAddress = (char*)End;
+	//Map the secondary buffer
+	Serial.WriteString(0x1, "\r\nMap second video memory");
+	for(unsigned long i = End; i <= End + (GUI.BytesPerLine * GUI.Height); i += 0x1000)
+	{
+		MemorySeg* NextFrame = PhysMemory.FindFreePhyAddr();
+		PhysMemory.UsePhyAddr(NextFrame, MEMORYSEG_LOCKED); 
+		Paging.MapAddress(NextFrame->BaseAddress, i);
+		
+	}
+	Serial.WriteString(0x1, "\r\nMapping done!\r\nStarting...");
 	Paging.Activate();
-	PrintString(" [Done]\r\n\r\n", 0x0A);
-	while(1);
+	char shade = 128;
+	long Time = 0;
+	int x = 214, y = 532;
+	int xVel = 15, yVel = 18;
+	while(1)
+	{
+		DrawString("Test string", 11, x, y);
+		GUI.Update();
+		x += xVel;
+		y += yVel;
+		if(x < 0)
+		{
+			x = 0;
+			xVel = -xVel;
+		}
+		else if(x + 99 > GUI.Width)
+		{
+			x = GUI.Width - 99;
+			xVel = -xVel;
+		}
+		if(y < 0)
+		{
+			y = 0;
+			yVel = -yVel;
+		}
+		else if(y + 9 > GUI.Height)
+		{
+			y = GUI.Height - 9;
+			yVel = -yVel;
+		}
+		Time = TimeSinceStart;
+	}
 }
 /////////////////////KERNEL END///////////////////////////

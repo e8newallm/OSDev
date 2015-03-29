@@ -1,7 +1,9 @@
+extern SerialController Serial;
+
 void Kernel_Panic(char* Reason)
 {
-	PrintString("\r\nKernel panic: ", 0x0A);
-	PrintString(Reason, 0x0A);
+	Serial.WriteString(0x1, "\r\nKernel panic: ");
+	Serial.WriteString(0x1, Reason);
 	Output8(0x21, 0xFF); //Masking the PIC Master/Slave to stop all IRQs
 	Output8(0xA1, 0xFF);
 	while(1)
@@ -31,4 +33,5 @@ struct CPUIDdat
 	long MaxPhyAddr; //Checks the max physical address width supported
 	long MaxLinAddr; //Checks the max linear address width supported
 };
+	
 	

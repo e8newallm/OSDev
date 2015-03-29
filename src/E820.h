@@ -93,6 +93,22 @@
        } u;
        unsigned int mmap_length;
        unsigned int mmap_addr;
+	   
+	   unsigned int drives_length;
+	   unsigned int drives_addr;
+	   
+	   unsigned int config_table;
+	   
+	   unsigned int boot_loader_name;
+	   
+	   unsigned int apm_table;
+	   
+	   unsigned int vbe_control_info;
+       unsigned int vbe_mode_info;
+       unsigned short vbe_mode;
+       unsigned short vbe_interface_seg;
+       unsigned short vbe_interface_off;
+       unsigned short vbe_interface_len;
      } multiboot_info_t;
      
      /* The module structure. */
@@ -116,5 +132,39 @@
        unsigned int type;
      } memory_map_t;
      
+	 struct vbe_mode_info_struct
+	 {
+		unsigned short ModeAttr;
+		unsigned char WinAAttr;
+		unsigned char WinBAttr;
+		unsigned short WinGran;
+		unsigned short WinSize;
+		unsigned short WinASeg;
+		unsigned short WinBSeg;
+		unsigned int WinFuncPtr;
+		unsigned short BytesPerScanLine;
+		unsigned short XRes;
+		unsigned short YRes;
+		unsigned char XCharSize;
+		unsigned char YCharSize;
+		unsigned char NumPlanes;
+		unsigned char BitsPerPixel;
+		unsigned char NumBanks;
+		unsigned char MemoryModel;
+		unsigned char BankSize;
+		unsigned char NumImagePages;
+		unsigned char Reserved;
+		unsigned char RedMaskSize;
+		unsigned char RedFieldPos;
+		unsigned char GreenMaskSize;
+		unsigned char GreenFieldPos;
+		unsigned char BlueMaskSize;
+		unsigned char BlueFieldPos;
+		unsigned char RSVDMaskSize;
+		unsigned char RSVDFieldPos;
+		unsigned char DirectColorModeInfo;
+		unsigned int PhysBasePtr;
+	 } __attribute__((packed));
+	 
      #endif /* ! ASM */
      

@@ -64,14 +64,16 @@ extern "C" void GenProtExc()
 
 extern "C" void PageFaultExc()
 {
-	int ErrorCode = 0;
-	asm volatile("POPQ %%RAX;"
-				 "MOV %%EAX, %0;"
-				 :"=r" (ErrorCode)
-				 :
-				 :"eax");
-	PrintString("\r\nError with Paging: ", 0x0A);
-	//PrintString(LongToStringHex(ErrorCode), 0x0A);
+	char ErrorCode;
+	long VirtualAddr;
+	asm volatile("MOV %%AL, %0"
+			: "=a"(ErrorCode));
+	asm volatile("MOV %%CR2 , %0"
+		: "=a"(VirtualAddr));
+	Serial.WriteString(0x1, "\r\nError code: ");
+	Serial.WriteLongHex(0x1, (long)ErrorCode);
+	Serial.WriteString(0x1, " Virtual address: ");
+	Serial.WriteLongHex(0x1, VirtualAddr);
 	Kernel_Panic("Page fault error (0xE)");
 }
 

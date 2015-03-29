@@ -1,6 +1,7 @@
 //TODO: Add an option into Malloc for small allocations (Allocate a separate frame for variables of that size, and use a bitmap to track)
 extern bool PrintString(const char* String, char Colour);
 extern char* LongToStringHexTemp(long Number);
+extern PageFile Paging;
 
 MemorySeg* FindFirstBlock(unsigned long Size)
 {	//TODO: Improve the efficiency
@@ -66,7 +67,9 @@ void* malloc(unsigned int Size)
 		if(MemFrame == PhysMemory.EOM())
 		{
 			MemFrame = AllocateFrame();
-			BlockHeader* Block = (BlockHeader*)(MemFrame->BaseAddress);
+			unsigned long Address = Paging.GetFreeAddress();
+			Paging.MapAddress((MemFrame->BaseAddress), Address);
+			BlockHeader* Block = (BlockHeader*)Address;
 			Block->PrevSize = 0;
 			Block->PrevUsage = BLOCKHEADER_SOB;
 			Block->Usage = BLOCKHEADER_INUSE;
@@ -76,13 +79,13 @@ void* malloc(unsigned int Size)
 			NextBlock->PrevUsage = BLOCKHEADER_INUSE;
 			NextBlock->Usage = BLOCKHEADER_FREE;
 			NextBlock->Size = PhysMemory.MemorySegSize - (3*sizeof(BlockHeader)) - Size;
-			BlockHeader* FinalBlock = (BlockHeader*)((long)(MemFrame->BaseAddress) + PhysMemory.MemorySegSize - sizeof(BlockHeader));
+			BlockHeader* FinalBlock = (BlockHeader*)(Address + PhysMemory.MemorySegSize - sizeof(BlockHeader));
 			FinalBlock->PrevSize = NextBlock->Size;
 			FinalBlock->PrevUsage = BLOCKHEADER_FREE;
 			FinalBlock->Usage = BLOCKHEADER_EOB;
 			FinalBlock->Size = 0;
 			MemFrame->LargestBlock = 0;
-			for(BlockHeader* Largest = (BlockHeader*)MemFrame->BaseAddress;
+			for(BlockHeader* Largest = (BlockHeader*)Address;
 				(unsigned long)Largest < (MemFrame->BaseAddress + PhysMemory.MemorySegSize);
 				Largest = (BlockHeader*)((unsigned long)Largest + Largest->Size + sizeof(BlockHeader)))
 			{

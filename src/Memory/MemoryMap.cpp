@@ -151,14 +151,20 @@ void* MemoryMap::UseFreePhyAddr(char MemUsage = MEMORYSEG_INUSE)
 
 int MemoryMap::UsePhyAddr(MemorySeg* MemoryAddr, char MemUsage = MEMORYSEG_INUSE)
 {
+	
 	if(AddrToPos(MemoryAddr) >= Size || ((long)MemoryAddr - (long)PhyMemMap) % sizeof(MemorySeg) != 0x00) //Return -1 if MemoryAddr isn't a physical memory map entry
 	{
+		//Serial.WriteString(0x1, "\r\nInvalid Memory Address");
 		return -1;
 	}
+	//Serial.WriteString(0x1, "\r\nMemory address ");
+	//Serial.WriteLongHex(0x1, MemoryAddr->BaseAddress);
 	if(MemoryAddr->Usage != MEMORYSEG_FREE) //Return the current usage if memory block isn't free
 	{
+		//Serial.WriteString(0x1, " isn't available.");
 		return MemoryAddr->Usage;
 	}
+	//Serial.WriteString(0x1, " is available.");
 	MemoryAddr->Usage = MemUsage;
 	MemoryAddr->LargestBlock = MemorySegSize;
 	return 0x00; //Return 0 on success

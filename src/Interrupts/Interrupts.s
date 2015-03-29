@@ -120,8 +120,8 @@ ExcD:
 	IRETQ
 
 ExcE:
+	POP %RAX
 	CALL PageFaultExc
-	PopAll
 	IRETQ
 
 Exc10:

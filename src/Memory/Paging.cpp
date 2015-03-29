@@ -29,6 +29,7 @@ class PageFile
 	void Initialise();
 	bool MapAddress(unsigned long, unsigned long);
 	void Activate();
+	unsigned long GetFreeAddress();
 };
 
 bool PageFile::MapAddress(unsigned long PhyAddr, unsigned long VirtAddr)
@@ -38,6 +39,8 @@ bool PageFile::MapAddress(unsigned long PhyAddr, unsigned long VirtAddr)
 	if(Pages[PML4Index] == (long)0)
 	{
 		long* NewTable = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
+		//Serial.WriteString(0x1, "\r\nNew paging table at: ");
+		//Serial.WriteLongHex(0x1, (long)(NewTable));
 		PageTableSetup(NewTable);
 		Pages[PML4Index] = (long)NewTable | 3; //Temporary
 	}
@@ -47,6 +50,8 @@ bool PageFile::MapAddress(unsigned long PhyAddr, unsigned long VirtAddr)
 	if(PDPTTable[PDPTIndex] == (long)0)
 	{
 		long* NewTable = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
+		//Serial.WriteString(0x1, "\r\nNew paging table at: ");
+		//Serial.WriteLongHex(0x1, (long)(NewTable));
 		PageTableSetup(NewTable);
 		PDPTTable[PDPTIndex] = (long)NewTable | 3; //Temporary
 	}
@@ -56,6 +61,8 @@ bool PageFile::MapAddress(unsigned long PhyAddr, unsigned long VirtAddr)
 	if(PDTable[PDIndex] == (long)0)
 	{
 		long* NewTable = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
+		//Serial.WriteString(0x1, "\r\nNew paging table at: ");
+		//Serial.WriteLongHex(0x1, (long)(NewTable));
 		PageTableSetup(NewTable);
 		PDTable[PDIndex] = (long)NewTable | 3; //Temporary
 	}
@@ -63,7 +70,8 @@ bool PageFile::MapAddress(unsigned long PhyAddr, unsigned long VirtAddr)
 	long* PETable = (long*)((long)PDTable[PDIndex] & 0x7FFFFFFFFF000);
 	unsigned short PTIndex = CONVERTFROMPT(VirtAddr);
 	PETable[PTIndex] = (long)AlignedPhyAddr | 0x83;
-	PhysMemory.UsePhyAddr(PhysMemory.FindPhyAddr((void*)PhyAddr), MEMORYSEG_LOCKED);
+	
+	//__asm__("invlpg PETable");
 	return true;
 }
 
@@ -77,6 +85,54 @@ void PageFile::Initialise()
 {
 	Pages = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
 	PageTableSetup(Pages);
+}
+
+unsigned long PageFile::GetFreeAddress()
+{
+	for(int PML4Index = 0; PML4Index < 512; PML4Index++)
+	{
+		if(Pages[PML4Index] == (long)0)
+		{
+			long* NewTable = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
+			PageTableSetup(NewTable);
+			Pages[PML4Index] = (long)NewTable | 3; //Temporary
+		}
+		
+		long* PDPTTable = (long*)((long)Pages[PML4Index] & 0x7FFFFFFFFF000);
+		
+		for(int PDPTIndex = 0; PDPTIndex < 512; PDPTIndex++)
+		{
+			if(PDPTTable[PDPTIndex] == (long)0)
+			{
+				long* NewTable = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
+				PageTableSetup(NewTable);
+				PDPTTable[PDPTIndex] = (long)NewTable | 3; //Temporary
+			}	
+			
+			long* PDTable = (long*)((long)PDPTTable[PDPTIndex] & 0x7FFFFFFFFF000);
+			
+			for(int PDIndex = 0; PDIndex < 512; PDIndex++)
+			{
+				if(PDTable[PDIndex] == (long)0)
+				{
+					long* NewTable = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
+					PageTableSetup(NewTable);
+					PDTable[PDIndex] = (long)NewTable | 3; //Temporary
+				}
+				
+				long* PETable = (long*)((long)PDTable[PDIndex] & 0x7FFFFFFFFF000);
+				
+				for(int PTIndex = 0; PTIndex < 512; PTIndex++)
+				{
+					if(PETable[PTIndex] == 0x00)
+					{
+						return (CONVERTTOPML4(PML4Index) + CONVERTTOPDPT(PDPTIndex) + CONVERTTOPD(PDIndex) + CONVERTTOPT(PTIndex));
+					}
+				}
+			}			
+		}
+	}
+	return (long)0;
 }
 
 long PDTemp[] __attribute__((section (".PD")))

@@ -2,8 +2,6 @@
 ////////////////////////Long Manipulation////////////////////////////////
 /////////////////////////////////////////////////////////////////////////
 
-unsigned char Hex[17] = "0123456789ABCDEF";
-
 long LongDigits(long Number) //Calculate amount of Decimal digits
 {
 	long i = 1;
@@ -49,43 +47,10 @@ char* LongToString(long Number) //Convert Decimal number into string
 	return Return;
 }
 
-char* LongToStringHexTemp(long Number) //Convert Hexadecimal number into string
-{
-	long Size = LongDigitsHex(Number) + 2;
-	bool Neg = Number < 0;
-	char Return[Size+1];
-	if(Neg)
-	{
-		Number = -Number;
-		Size++;
-		Return[0] = '-';
-		Return[1] = '0';
-		Return[2] = 'x';
-	}
-	else
-	{
-		Return[0] = '0';
-		Return[1] = 'x';
-	}
-	Return[Size] = (char)0;
-	Return[Size-1] = '0';
-	long i;
-	for(i = Size-1; Number != 0 ; i--)
-	{
-		Return[i] = Hex[(Number % 16)];
-		Number /= 16;
-	}
-	if(Neg) ;
-	return Return;
-}
-
 char* ULongToString(unsigned long Number) //Convert Decimal number into string
 {
 	long Size = LongDigits(Number);
 	char* Return = (char*)malloc(Size+1);
-	PrintString("Length: ", 0x0A);
-	PrintString(LongToStringHexTemp(Size), 0x0A);
-	PrintString("\r\n", 0x0A);
 	for(long i = 0; i <= Size; i++)
 	{
 		Return[i] = '0';

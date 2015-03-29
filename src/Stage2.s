@@ -16,9 +16,6 @@
 BootStart:
 	CLI
 	MOV %EBX, mbd
-
-	#Get CPUID data
-	
 	
 	#Make sure Paging is disabled
 	MOV %CR0, %EAX
@@ -52,7 +49,23 @@ BootStart:
 	
 	MOVL StackBase, %EBP
 	MOVL StackBase, %ESP
+
 	
 	LGDT (GDTPointer)
 	LJMP $0x0008, $Kernel_Start
+	
+	#Go back to real mode
+	MOV %CR0, %EAX
+	AND $0xFFFFFFFE, %EAX
+	MOV %EAX, %CR0
+	
+	#Change video mode
+	MOV $0x00, %AH
+	MOV $0x12, %AL
+	INT $0x10
+	
+	#Go back to protected mode
+	MOV %CR0, %EAX
+	OR 0x1, %EAX
+	MOV %EAX, %CR0
 	
