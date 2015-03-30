@@ -18,18 +18,43 @@ public:
 	unsigned char RSVDMaskSize;
 	unsigned char RSVDFieldPos;
 	
-	char* FrameAddress;
-	char* SecondFrameAddress;
+	unsigned char* FrameAddress;
+	unsigned char* SecondFrameAddress;
 	
-	char* operator()(unsigned int, unsigned int);
+	unsigned char* operator()(unsigned int, unsigned int);
+	void DrawPixel(unsigned int, unsigned int, unsigned char, unsigned char, unsigned char);
+	void DrawRect(unsigned int, unsigned int, unsigned int, unsigned int, unsigned char, unsigned char, unsigned char);
 	void Update();
 	Video(vbe_mode_info_struct*);
 	Video();
 };
 
-char* Video::operator()(unsigned int x, unsigned int y)
+unsigned char* Video::operator()(unsigned int x, unsigned int y)
 {
-	return (SecondFrameAddress + ((y * BytesPerLine) + (x * Depth/8)));
+	return (SecondFrameAddress + ((y * BytesPerLine) + (x * Depth)));
+}
+
+void Video::DrawPixel(unsigned int x, unsigned int y, unsigned char r, unsigned char g, unsigned char b)
+{
+	unsigned char* Pos = (SecondFrameAddress + ((y * BytesPerLine) + (x * Depth)));
+	*Pos = r;
+	*(Pos + 1) = g;
+	*(Pos + 2)= b;
+}
+
+void Video::DrawRect(unsigned int x, unsigned int y, unsigned int Width, unsigned int Height, unsigned char r, unsigned char g, unsigned char b)
+{
+	unsigned char* Start = (SecondFrameAddress + ((y * BytesPerLine) + (x * Depth)));
+	for(unsigned int yPos = 0; yPos < Height; yPos++)
+	{	
+		for(unsigned int xPos = 0; xPos < Width*Depth; xPos += Depth)
+		{	
+			Start[xPos] = r;
+			Start[xPos+1] = g;
+			Start[xPos+2] = b;
+		}
+		Start += BytesPerLine;
+	}
 }
 
 void Video::Update()
@@ -50,8 +75,8 @@ Video::Video(vbe_mode_info_struct* Video_data)
 {
 	Width = Video_data->XRes;
 	Height = Video_data->YRes;
-	Depth = Video_data->BitsPerPixel;
-	FrameAddress = (char*)((long)Video_data->PhysBasePtr);
+	Depth = Video_data->BitsPerPixel / 8;
+	FrameAddress = (unsigned char*)((long)Video_data->PhysBasePtr);
 	BytesPerLine = Video_data->BytesPerScanLine;
 	MemoryModel = Video_data->MemoryModel;
 	ModeAttributes = Video_data->ModeAttr;

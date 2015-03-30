@@ -134,9 +134,9 @@ extern "C" void Kernel_Start()
 		Paging.MapAddress(((unsigned long)GUI.FrameAddress + i), 0xA00000 + i);
 		End = 0xA00000 + i;
 	}
-	GUI.FrameAddress = (char*)0xA00000;
+	GUI.FrameAddress = (unsigned char*)0xA00000;
 	End += 0x1000;
-	GUI.SecondFrameAddress = (char*)End;
+	GUI.SecondFrameAddress = (unsigned char*)End;
 	//Map the secondary buffer
 	Serial.WriteString(0x1, "\r\nMap second video memory");
 	for(unsigned long i = End; i <= End + (GUI.BytesPerLine * GUI.Height); i += 0x1000)
@@ -154,8 +154,18 @@ extern "C" void Kernel_Start()
 	int xVel = 15, yVel = 18;
 	while(1)
 	{
-		DrawString("Test string", 11, x, y);
+		long x = 0, y = 0, Width = GUI.Width, Height = GUI.Height;
+		while(x < Width && y < Height)
+		{
+			GUI.DrawRect(x, y, Width, Height, (char)(128 + y), (char)(50 + y), (char)(75 + y));
+			x++;
+			y++;
+			Width -= 2;
+			Height -= 2;
+		}
+		//DrawString("Test string", 11, x, y);
 		GUI.Update();
+		while(1);
 		x += xVel;
 		y += yVel;
 		if(x < 0)
