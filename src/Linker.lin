@@ -23,6 +23,11 @@ SECTIONS
 		{
 			*(.PD) 
 		} 
+		
+		.PT : ALIGN(0x1000)
+		{
+			*(.PT) 
+		} 
 		. = ALIGN(4096);
 		KernelStart = .;
 		

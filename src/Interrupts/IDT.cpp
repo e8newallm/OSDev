@@ -29,7 +29,8 @@ struct __attribute__((packed)) IDTStruct
 	IDTPtr Pointer;
 };
 
-long extern KeyboardInt, SystemTimerInt;
+long extern KeyboardInt, SystemTimerInt, ProcessSwitchInt;
+
 long extern Exc0, Exc1, Exc2, Exc3, Exc4, Exc5,
 			Exc6, Exc7, Exc8, ExcA, ExcB, ExcC,
 			ExcD, ExcE, Exc10, Exc11, Exc12,
@@ -44,6 +45,11 @@ void PICEndInt(char IRQ)
 		Output8(PICS_Com, PIC_EOI);
 	}
 	Output8(PICM_Com, PIC_EOI);
+}
+
+inline void Int22()
+{
+	__asm__("int $0x22\r\n");
 }
 
 void SetGate(char GateAddr, long* Offset, char Type)
@@ -92,6 +98,12 @@ extern "C" void KeyboardInterrupt()
 
 extern "C" void SystemTimerInterrupt()
 {
-	TimeSinceStart++;
+	Serial.WriteString(0x1, "\r\nSystem Timer Interrupt start");
+	TimeSinceStart += 50;
+	CurrentProcess->Duration += 50;
 	PICEndInt((char)0);
+	if(CurrentProcess->Duration >= CurrentProcess->MaxDuration)
+	{
+		SwitchProcesses();
+	}
 }

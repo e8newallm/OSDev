@@ -1,4 +1,4 @@
-//PML4 -> PDPT -> PD -> PT
+///PML4 -> PDPT -> PD -> PT
 
 #define CONVERTTOPML4(x) x << 39
 #define CONVERTTOPDPT(x) x << 30
@@ -25,53 +25,119 @@ void PageTableSetup(long* TableEntries)
 class PageFile
 {
 	public:
-	long* Pages;
-	void Initialise();
+	long* Pages = 0x0;
 	bool MapAddress(unsigned long, unsigned long);
+	bool RawMapAddress(unsigned long, unsigned long);
 	void Activate();
 	unsigned long GetFreeAddress();
+	void SetupStartMemory();
+	void CreateTable(unsigned long);
 };
+
+PageFile Paging;
+
+void PageFile::CreateTable(unsigned long VirtAddr)
+{
+	unsigned long CurrentPage;
+	asm volatile("MOV %%CR3, %0" : "=r"(CurrentPage));
+	Paging.Activate();
+	long* NewPML4;
+	long* NewPDPT;
+	long* NewPD;
+	long* NewPT;
+	
+	unsigned char PML4Index = CONVERTFROMPML4(VirtAddr);
+	unsigned short PDPTIndex = CONVERTFROMPDPT(VirtAddr);
+	unsigned short PDIndex = CONVERTFROMPD(VirtAddr);
+	long Address = GETTABLEADDR(VirtAddr);
+	if(Pages == 0x0)
+	{
+		NewPML4 = (long*)PhysMemory.UseFreePhyAddr();
+		NewPDPT = (long*)PhysMemory.UseFreePhyAddr();
+		NewPD = (long*)PhysMemory.UseFreePhyAddr();
+		NewPT = (long*)PhysMemory.UseFreePhyAddr();
+		Pages = (long*)NewPML4;
+		Pages[PML4Index] = (long)NewPDPT | 0x3;
+		NewPDPT[PDPTIndex] = (long)NewPD | 0x3;
+		NewPD[PDIndex] = (long)NewPT | 0x3;
+		asm volatile("MOV %0, %%CR3" : : "r"(CurrentPage));
+		return;
+	}
+	
+	if(Pages[PML4Index] == (long)0)
+	{
+		NewPDPT = (long*)PhysMemory.UseFreePhyAddr();
+		NewPD = (long*)PhysMemory.UseFreePhyAddr();
+		NewPT = (long*)PhysMemory.UseFreePhyAddr();
+		Pages[PML4Index] = (long)NewPDPT | 0x3;
+		NewPDPT[PDPTIndex] = (long)NewPD | 0x3;
+		NewPD[PDIndex] = (long)NewPT | 0x3;
+		asm volatile("MOV %0, %%CR3" : : "r"(CurrentPage));
+		return;
+	}
+	long* PDPTTable = (long*)(GETTABLEADDR(Pages[PML4Index]));
+	if(PDPTTable[PDPTIndex] == (long)0)
+	
+	{
+		NewPD = (long*)PhysMemory.UseFreePhyAddr();
+		NewPT = (long*)PhysMemory.UseFreePhyAddr();
+		PDPTTable[PDPTIndex] = (long)NewPD | 0x3;
+		NewPD[PDIndex] = (long)NewPT | 0x3;
+		NewPD[PDIndex] = (long)NewPT | 0x3;
+		asm volatile("MOV %0, %%CR3" : : "r"(CurrentPage));
+	}
+	long* PDTable = (long*)(GETTABLEADDR(PDPTTable[PDPTIndex]));
+	if(PDTable[PDIndex] == (long)0)
+	{
+		NewPT = (long*)PhysMemory.UseFreePhyAddr();
+		PDTable[PDIndex] = (long)NewPT | 0x3;
+		asm volatile("MOV %0, %%CR3" : : "r"(CurrentPage));
+		return;
+	}
+	asm volatile("MOV %0, %%CR3" : : "r"(CurrentPage));
+	return;
+}
+
+bool PageFile::RawMapAddress(unsigned long PhyAddr, unsigned long VirtAddr)
+{
+	unsigned long AlignedPhyAddr = GETTABLEADDR(PhyAddr);
+	unsigned char PML4Index = CONVERTFROMPML4(VirtAddr);
+	
+	long* PDPTTable = (long*)(GETTABLEADDR(Pages[PML4Index]));
+	unsigned short PDPTIndex = CONVERTFROMPDPT(VirtAddr);
+
+	long* PDTable = (long*)(GETTABLEADDR(PDPTTable[PDPTIndex]));
+	unsigned short PDIndex = CONVERTFROMPD(VirtAddr);
+	
+	long* PETable = (long*)(GETTABLEADDR(PDTable[PDIndex]));
+	unsigned short PTIndex = CONVERTFROMPT(VirtAddr);
+	PETable[PTIndex] = (long)AlignedPhyAddr | 0x83;
+	__asm__("invlpg (%0)" : : "r"((void*)PDTable));
+	return true;
+}
 
 bool PageFile::MapAddress(unsigned long PhyAddr, unsigned long VirtAddr)
 {
-	unsigned long AlignedPhyAddr = PhyAddr & 0xFFFFFFFFFFFFF000;
+	CreateTable(VirtAddr);
+	unsigned long CurrentPage;
+	asm volatile("MOV %%CR3, %0" : "=r"(CurrentPage));
+	Paging.Activate();
+	
+	unsigned long AlignedPhyAddr = GETTABLEADDR(PhyAddr);
 	unsigned char PML4Index = CONVERTFROMPML4(VirtAddr);
-	if(Pages[PML4Index] == (long)0)
-	{
-		long* NewTable = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
-		//Serial.WriteString(0x1, "\r\nNew paging table at: ");
-		//Serial.WriteLongHex(0x1, (long)(NewTable));
-		PageTableSetup(NewTable);
-		Pages[PML4Index] = (long)NewTable | 3; //Temporary
-	}
-	
-	long* PDPTTable = (long*)((long)Pages[PML4Index] & 0x7FFFFFFFFF000);
+
+	long* PDPTTable = (long*)(GETTABLEADDR(Pages[PML4Index]));
 	unsigned short PDPTIndex = CONVERTFROMPDPT(VirtAddr);
-	if(PDPTTable[PDPTIndex] == (long)0)
-	{
-		long* NewTable = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
-		//Serial.WriteString(0x1, "\r\nNew paging table at: ");
-		//Serial.WriteLongHex(0x1, (long)(NewTable));
-		PageTableSetup(NewTable);
-		PDPTTable[PDPTIndex] = (long)NewTable | 3; //Temporary
-	}
-	
-	long* PDTable = (long*)((long)PDPTTable[PDPTIndex] & 0x7FFFFFFFFF000);
+
+	long* PDTable = (long*)(GETTABLEADDR(PDPTTable[PDPTIndex]));
 	unsigned short PDIndex = CONVERTFROMPD(VirtAddr);
-	if(PDTable[PDIndex] == (long)0)
-	{
-		long* NewTable = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
-		//Serial.WriteString(0x1, "\r\nNew paging table at: ");
-		//Serial.WriteLongHex(0x1, (long)(NewTable));
-		PageTableSetup(NewTable);
-		PDTable[PDIndex] = (long)NewTable | 3; //Temporary
-	}
 	
-	long* PETable = (long*)((long)PDTable[PDIndex] & 0x7FFFFFFFFF000);
+	long* PTTable = (long*)(GETTABLEADDR(PDTable[PDIndex]));
 	unsigned short PTIndex = CONVERTFROMPT(VirtAddr);
-	PETable[PTIndex] = (long)AlignedPhyAddr | 0x83;
-	
-	//__asm__("invlpg PETable");
+
+	PTTable[PTIndex] = (long)AlignedPhyAddr | 0x83;
+	__asm__("invlpg (%0)" : : "r"((void*)PDTable));
+	asm volatile("MOV %0, %%CR3" : : "r"(CurrentPage));
 	return true;
 }
 
@@ -81,53 +147,30 @@ void PageFile::Activate()
 			: : "a"(Pages));
 }
 
-void PageFile::Initialise()
-{
-	Pages = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
-	PageTableSetup(Pages);
-}
-
 unsigned long PageFile::GetFreeAddress()
 {
-	for(int PML4Index = 0; PML4Index < 512; PML4Index++)
+	for(long PML4Index = 0; PML4Index < 512; PML4Index++)
 	{
 		if(Pages[PML4Index] == (long)0)
-		{
-			long* NewTable = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
-			PageTableSetup(NewTable);
-			Pages[PML4Index] = (long)NewTable | 3; //Temporary
-		}
+			return CONVERTTOPML4(PML4Index);
+		long* PDPTTable = (long*)(GETTABLEADDR(Pages[PML4Index]));
 		
-		long* PDPTTable = (long*)((long)Pages[PML4Index] & 0x7FFFFFFFFF000);
-		
-		for(int PDPTIndex = 0; PDPTIndex < 512; PDPTIndex++)
+		for(long PDPTIndex = 0; PDPTIndex < 512; PDPTIndex++)
 		{
 			if(PDPTTable[PDPTIndex] == (long)0)
-			{
-				long* NewTable = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
-				PageTableSetup(NewTable);
-				PDPTTable[PDPTIndex] = (long)NewTable | 3; //Temporary
-			}	
-			
-			long* PDTable = (long*)((long)PDPTTable[PDPTIndex] & 0x7FFFFFFFFF000);
-			
-			for(int PDIndex = 0; PDIndex < 512; PDIndex++)
+				return CONVERTTOPML4(PML4Index) + CONVERTTOPDPT(PDPTIndex);
+			long* PDTable = (long*)(GETTABLEADDR(PDPTTable[PDPTIndex]));
+				
+			for(long PDIndex = 0; PDIndex < 512; PDIndex++)
 			{
 				if(PDTable[PDIndex] == (long)0)
-				{
-					long* NewTable = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
-					PageTableSetup(NewTable);
-					PDTable[PDIndex] = (long)NewTable | 3; //Temporary
-				}
+					return CONVERTTOPML4(PML4Index) + CONVERTTOPDPT(PDPTIndex) + CONVERTTOPD(PDIndex);
+				long* PETable = (long*)(GETTABLEADDR(PDTable[PDIndex]));
 				
-				long* PETable = (long*)((long)PDTable[PDIndex] & 0x7FFFFFFFFF000);
-				
-				for(int PTIndex = 0; PTIndex < 512; PTIndex++)
+				for(long PTIndex = 0; PTIndex < 512; PTIndex++)
 				{
 					if(PETable[PTIndex] == 0x00)
-					{
 						return (CONVERTTOPML4(PML4Index) + CONVERTTOPDPT(PDPTIndex) + CONVERTTOPD(PDIndex) + CONVERTTOPT(PTIndex));
-					}
 				}
 			}			
 		}
@@ -135,46 +178,52 @@ unsigned long PageFile::GetFreeAddress()
 	return (long)0;
 }
 
-long PDTemp[] __attribute__((section (".PD")))
+void PageFile::SetupStartMemory()
 {
-	(long)0x83,
-	(long)0x200083,
-	(long)0x400083,
-	(long)0x600083,
-	(long)0x800083,
-	(long)0xA00083,
-	(long)0xC00083,
-	(long)0xE00083,
-	(long)0x1000083,
-	(long)0x1200083,
-	(long)0x1400083,
-	(long)0x1600083,
-	(long)0x1800083,
-	(long)0x1A00083,
-	(long)0x1C00083,
-	(long)0x1E00083,
-	(long)0x2000083,
-	(long)0x2200083,
-	(long)0x2400083,
-	(long)0x2600083,
-	(long)0x2800083,
-	(long)0x2A00083,
-	(long)0x2C00083,
-	(long)0x2E00083,
-	(long)0x3000083,
-	(long)0x3200083,
-	(long)0x3400083,
-	(long)0x3600083,
-	(long)0x3800083,
-	(long)0x3A00083,
-};
+	for(unsigned long i = 0; i < 0xA00000; i += 0x1000)
+	{
+		MapAddress(i, i);
+	}
+}
 
-long PDPTTemp[] __attribute__((section (".PDPT")))
+long PD[] __attribute__((section (".PD")))
 {
-	(long)&PDTemp + (long)0x03
+(long)0x83,
+(long)0x200083,
+(long)0x400083,
+(long)0x600083,
+(long)0x800083,
+(long)0xA00083,
+(long)0xC00083,
+(long)0xE00083,
+(long)0x1000083,
+(long)0x1200083,
+(long)0x1400083,
+(long)0x1600083,
+(long)0x1800083,
+(long)0x1A00083,
+(long)0x1C00083,
+(long)0x1E00083,
+(long)0x2000083,
+(long)0x2200083,
+(long)0x2400083,
+(long)0x2600083,
+(long)0x2800083,
+(long)0x2A00083,
+(long)0x2C00083,
+(long)0x2E00083,
+(long)0x3000083,
+(long)0x3200083,
+(long)0x3400083,
+(long)0x3600083,
+(long)0x3800083,
+(long)0x3A00083,
 };
-
-long PML4Temp[] __attribute__((section (".PML4")))  = 
+long PDPT[] __attribute__((section (".PDPT")))
 {
-	(long)&PDPTTemp + (long)0x3
+(long)&PD + (long)0x03
+};
+long PML4[] __attribute__((section (".PML4"))) =
+{
+(long)&PDPT + (long)0x3
 };

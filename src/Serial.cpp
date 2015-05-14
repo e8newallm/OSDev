@@ -70,15 +70,18 @@ bool SerialController::WriteChar(short COMPort, char Character)
 
 bool SerialController::WriteString(short COMPort, char* String)
 {
+	CLI();
 	for(int Pos = 0; String[Pos] != (char)0; Pos++)
 	{
 		WriteChar(COMPort, String[Pos]);
 	}
+	STI();
 	return true;
 }
 
 bool SerialController::WriteLongHex(short COMPort, long Value)
 {
+	CLI();
 	char Output[16];
 	int Pos = 0;
 	unsigned long Temp = Value;
@@ -102,7 +105,7 @@ bool SerialController::WriteLongHex(short COMPort, long Value)
 	{
 		WriteChar(COMPort, Output[Pos]);
 	}
-	
+	STI();
 	return true;
 }
 

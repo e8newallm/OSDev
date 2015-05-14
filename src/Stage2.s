@@ -33,7 +33,7 @@ BootStart:
 	MOV %EAX, %CR4
 	
 	#Load CR3 with Physical base address of Level 4 page map table (PML4)
-	MOV (PML4), %EAX
+	LEA (PML4), %EAX
 	MOV %EAX, %CR3
 	
 	#Enable IA-32e

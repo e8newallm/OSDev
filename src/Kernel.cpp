@@ -1,20 +1,23 @@
 long TimeSinceStart;
+double TimeSinceStartPart;
 
+#define CLI() __asm__("CLI");
+#define STI() __asm__("STI");
 unsigned char Hex[17] = "0123456789ABCDEF";
+
 #include "IO.cpp"
 #include "Serial.cpp"
+#include "Miscellaneous/Miscellaneous.cpp"
 #include "E820.h"
 #include "Memory/MemoryMap.cpp"
 #include "Memory/Paging.cpp"
 #include "Memory/Malloc.cpp"
-#include "BasicFunctions.cpp"
+//#include "BasicFunctions.cpp"
 
 #include "Keyboard.cpp"
-
+#include "Process.cpp"
 
 #include "Video/Video.cpp"
-
-#include "Miscellaneous/Miscellaneous.cpp"
 
 #include "Interrupts/Exceptions.cpp"
 #include "Interrupts/IDT.cpp"
@@ -27,20 +30,50 @@ int Header[12] __attribute__((section (".Multiboot"))) =
 	1024, 768, 24
 };
 
-
-short* PML4 = (short*)&PML4Temp;
 char* StackBase = (char*)0x001F000;
 char* StackBottom = (char*)0x001D000;
 char extern KernelStart;
 char extern KernelEnd;
 long* IDTPos;
 multiboot_info_t* mbd;
-MemoryMap PhysMemory;
-PageFile Paging;
 //SerialController Serial;
 unsigned short MemoryModel;
 long TestVar;
 char* BDA = (char*)0x400;
+Process Halt, Test, TestTwo, TestTwoTwo;
+
+volatile void SystemIdle()
+{
+	//__asm__("MOV %0, %%RSP\r\n" : : "r"(Halt.RSP));
+	//__asm__("MOV %0, %%CR3\r\n" : : "r"(Halt.RSP)); //TODO: Change to Halt's CR3
+	//(Halt.Page).Activate();
+	//Popa();
+	while(1)
+		Serial.WriteString(0x1, "\r\nIdling");
+}
+
+volatile void TestProcess()
+{
+	long i = 0;
+	while(1)
+	{
+		i+=5;
+		Serial.WriteString(0x1, "\r\nAdding: ");
+		Serial.WriteLongHex(0x1, i);
+	}
+}
+
+volatile void TestProcessTwo()
+{
+	long i = 0;
+	while(1)
+	{
+		i-=5;
+		Serial.WriteString(0x1, "\r\nSubtracting: ");
+		Serial.WriteLongHex(0x1, i);
+	}
+}
+
 /////////////////////KERNEL START///////////////////////////
 extern "C" void Kernel_Start()
 {
@@ -48,23 +81,13 @@ extern "C" void Kernel_Start()
 	
 	//Setup Serial ports
 	Serial.Setup(BDA);
-	Serial.WriteString(0x1, "Testing Serial Port!");
 	
 	//Setting up memory map
 	PhysMemory.Initialise(mbd, (MemorySeg*)&KernelEnd, 0x1000);
 	MemorySeg* LoopChk = PhysMemory.FindPhyAddr(&KernelEnd);
 	MemorySeg* KernelPointer;
-	
-	Serial.WriteString(0x1, "\r\nSetting Kernel memory blocks");
-	for(KernelPointer = PhysMemory.FindPhyAddr(0x0); KernelPointer <= LoopChk; KernelPointer++) //Setting Kernel memory blocks as in-use
-	{
-		PhysMemory.UsePhyAddr(KernelPointer, MEMORYSEG_LOCKED);
-	}
-	
-	Serial.WriteString(0x1, "\r\nSet up single IDT memory block");
 	//Setting up IDT
 	IDTPos = (long*)PhysMemory[PhysMemory.Size] + PhysMemory.MemorySegSize;
-	PhysMemory.UsePhyAddr(PhysMemory.FindPhyAddr(IDTPos), MEMORYSEG_LOCKED);
 	IDT = (IDTStruct*)IDTPos;
 	for(char* i = (char*)IDT; (long)i < (long)IDT + sizeof(IDTStruct); i++)
 	{
@@ -100,95 +123,65 @@ extern "C" void Kernel_Start()
 	SetGate(0x21, &KeyboardInt, 0b10001110);
 	TimeSinceStart = 0;
 	
-	//Set IRQ 0 to trigger every 50ms
+	//Set IRQ 0 to trigger every 50 microseconds
 	Output8(0x43, 0b00110100); //Set counter 0 to Rate Generator
-	Output8(0x40, 0x0B); //Set lower byte
-	Output8(0x40, 0xE9); //set higher byte 
+	Output8(0x40, 0x0B); //Set lower byte 0x3C
+	Output8(0x40, 0xE9); //set higher byte 0x00
 	__asm__("MOV (Pointer), %eax; LIDT (%eax);sti");
-	Output8(PICM_Dat, 0xFC);
-	Output8(PICS_Dat, 0xFF);
 	
-	Paging.Initialise();
-	// 1:1 mapping for the first 10MB of memory
-	Serial.WriteString(0x1, "\r\nMap all remaining memory blocks in first 10MB\r\n");
 	for(MemorySeg* Position = PhysMemory.FindPhyAddr((void*)0x0); Position <= PhysMemory.FindPhyAddr((void*)0xA00000); Position++)
 	{
 		PhysMemory.UsePhyAddr(Position, MEMORYSEG_LOCKED); 
 	}
 	
-	for(unsigned long i = 0; i < 0xA00000; i += 0x1000)
+	Paging.Pages = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
+	long FinalSeg = (PhysMemory.EOM() - 1)->BaseAddress;
+	for(unsigned long i = 0; i < FinalSeg; i += 0x1000)
 	{
-		Paging.MapAddress(i, i);
+		unsigned long AlignedPhyAddr = i & 0xFFFFFFFFFFFFF000;
+		unsigned char PML4Index = CONVERTFROMPML4(i);
+		if(Paging.Pages[PML4Index] == (long)0)
+		{
+			long* NewTable = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
+			Paging.Pages[PML4Index] = (long)NewTable | 3; //Temporary
+		}
+		long* PDPTTable = (long*)((long)Paging.Pages[PML4Index] & 0x7FFFFFFFFF000);
+		unsigned short PDPTIndex = CONVERTFROMPDPT(i);
+		if(PDPTTable[PDPTIndex] == (long)0)
+		{
+			long* NewTable = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
+			PDPTTable[PDPTIndex] = (long)NewTable | 3; //Temporary
+		}
+		long* PDTable = (long*)((long)PDPTTable[PDPTIndex] & 0x7FFFFFFFFF000);
+		unsigned short PDIndex = CONVERTFROMPD(i);
+		if(PDTable[PDIndex] == (long)0)
+		{
+			long* NewTable = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
+			PDTable[PDIndex] = (long)NewTable | 3; //Temporary
+		}
+		long* PETable = (long*)((long)PDTable[PDIndex] & 0x7FFFFFFFFF000);
+		unsigned short PTIndex = CONVERTFROMPT(i);
+		PETable[PTIndex] = (long)AlignedPhyAddr | 0x83;
 	}
-	
-	Serial.WriteString(0x1, "\r\nStarting Video setup");
-	
-	//Graphics setup
-	GUI = Video((vbe_mode_info_struct*)((long)mbd->vbe_mode_info));
-		
-	//Mapping Video memory starting at 0xA00000
-	unsigned long End = 0xA00000;
-	Serial.WriteString(0x1, "\r\nMap main video memory");
-	for(unsigned long i = 0; i < GUI.BytesPerLine * GUI.Height; i += 0x1000)
-	{
-		Paging.MapAddress(((unsigned long)GUI.FrameAddress + i), 0xA00000 + i);
-		End = 0xA00000 + i;
-	}
-	GUI.FrameAddress = (unsigned char*)0xA00000;
-	End += 0x1000;
-	GUI.SecondFrameAddress = (unsigned char*)End;
-	//Map the secondary buffer
-	Serial.WriteString(0x1, "\r\nMap second video memory");
-	for(unsigned long i = End; i <= End + (GUI.BytesPerLine * GUI.Height); i += 0x1000)
-	{
-		MemorySeg* NextFrame = PhysMemory.FindFreePhyAddr();
-		PhysMemory.UsePhyAddr(NextFrame, MEMORYSEG_LOCKED); 
-		Paging.MapAddress(NextFrame->BaseAddress, i);
-		
-	}
-	Serial.WriteString(0x1, "\r\nMapping done!\r\nStarting...");
 	Paging.Activate();
-	char shade = 128;
-	long Time = 0;
-	int x = 214, y = 532;
-	int xVel = 15, yVel = 18;
-	while(1)
-	{
-		long x = 0, y = 0, Width = GUI.Width, Height = GUI.Height;
-		while(x < Width && y < Height)
-		{
-			GUI.DrawRect(x, y, Width, Height, (char)(128 + y), (char)(50 + y), (char)(75 + y));
-			x++;
-			y++;
-			Width -= 2;
-			Height -= 2;
-		}
-		//DrawString("Test string", 11, x, y);
-		GUI.Update();
-		while(1);
-		x += xVel;
-		y += yVel;
-		if(x < 0)
-		{
-			x = 0;
-			xVel = -xVel;
-		}
-		else if(x + 99 > GUI.Width)
-		{
-			x = GUI.Width - 99;
-			xVel = -xVel;
-		}
-		if(y < 0)
-		{
-			y = 0;
-			yVel = -yVel;
-		}
-		else if(y + 9 > GUI.Height)
-		{
-			y = GUI.Height - 9;
-			yVel = -yVel;
-		}
-		Time = TimeSinceStart;
-	}
+	
+	//Serial.WriteString(0x1, "\r\nStarting Video setup");
+	//Graphics setup
+	//GUI = Video((vbe_mode_info_struct*)((long)mbd->vbe_mode_info));
+	Halt = Process((void*)&SystemIdle, PhysMemory.UseFreePhyAddr(), 250);
+	Test = Process((void*)&TestProcess, PhysMemory.UseFreePhyAddr(), 100);
+	TestTwo = Process((void*)&TestProcessTwo, PhysMemory.UseFreePhyAddr(), 150);
+	TestTwoTwo = Process((void*)&TestProcessTwo, PhysMemory.UseFreePhyAddr(), 150);
+	CurrentProcess = &Halt;
+	CurrentProcess->NextProcess = CurrentProcess;
+	Test.Start();
+	TestTwo.Start();
+	TestTwoTwo.Start();
+	//Enables multitasking and PIT(As well as other IRQs)
+	Multitasking = true;
+	Output8(PICM_Dat, 0xFC);
+	Output8(PICS_Dat, 0xFF);
+	Serial.WriteString(0x1, "\r\nStarting multitasking");
+	SystemIdle();
 }
 /////////////////////KERNEL END///////////////////////////

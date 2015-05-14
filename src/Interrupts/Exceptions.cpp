@@ -2,8 +2,10 @@ extern "C" void DivideByZeroExc()
 {
 	Kernel_Panic("Divide-By-Zero error (0x0)");
 }
-extern "C" void DebugExc()
+extern "C" void DebugExc(long Address)
 {
+	Serial.WriteString(0x1, "\r\n\r\nAddress: ");
+	Serial.WriteLongHex(0x1, Address);
 	Kernel_Panic("Debug error (0x1)");
 }
 
@@ -27,8 +29,10 @@ extern "C" void BoundRangeExc()
 	Kernel_Panic("Bound Range Exceeded error (0x5)");
 }
 
-extern "C" void InvalidOpExc()
+extern "C" void InvalidOpExc(long Address)
 {
+	Serial.WriteString(0x1, "\r\n\r\nAddress: ");
+	Serial.WriteLongHex(0x1, Address);
 	Kernel_Panic("Invalid Opcode error (0x6)");
 }
 
