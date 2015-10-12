@@ -1,7 +1,6 @@
 struct MemorySeg
 {
 	unsigned long BaseAddress;
-	unsigned int LargestBlock;
 	unsigned char Usage;
 	// Usage = 00 : Free
 	// Usage = 01 : In use
@@ -15,23 +14,6 @@ const char MEMORYSEG_INUSE = 0x01;
 const char MEMORYSEG_LOCKED = 0x02;
 const char MEMORYSEG_ZERO = 0x03;
 const char MEMORYSEG_EOM = 0xFF;
-
-struct BlockHeader
-{
-	unsigned int PrevSize;
-	unsigned char PrevUsage;
-	unsigned char Usage;
-	//Usage = 00 : Free
-	//Usage = 01 : In Use
-	//Usage = FF : EoF
-	//Usage = FE : SoF
-	unsigned int Size;
-};
-
-const char BLOCKHEADER_FREE = 0x00;
-const char BLOCKHEADER_INUSE = 0x01;
-const char BLOCKHEADER_SOB = 0xFE;
-const char BLOCKHEADER_EOB = 0xFF;
 
 class MemoryMap
 {
@@ -136,7 +118,7 @@ MemorySeg* MemoryMap::FindFreePhyAddr()
 			return (PhyMemMap+Pos);
 		}
 	}
-	return (PhyMemMap+Size);
+	return EOM();
 }
 
 void* MemoryMap::UseFreePhyAddr(char MemUsage = MEMORYSEG_INUSE)
@@ -161,7 +143,6 @@ int MemoryMap::UsePhyAddr(MemorySeg* MemoryAddr, char MemUsage = MEMORYSEG_INUSE
 		return MemoryAddr->Usage;
 	}
 	MemoryAddr->Usage = MemUsage;
-	MemoryAddr->LargestBlock = MemorySegSize;
 	return 0x00; //Return 0 on success
 }
 
@@ -177,7 +158,6 @@ int MemoryMap::FreePhyAddr(MemorySeg* MemoryAddr)
 		return MemoryAddr->Usage;
 	}
 	MemoryAddr->Usage = MEMORYSEG_FREE;
-	MemoryAddr->LargestBlock = 0x000;
 	for(char* Zero = (char*)MemoryAddr->BaseAddress; Zero <= (char*)MemoryAddr->BaseAddress + 0xFFF; Zero++) // TODO: Replace with queue system that uses downtime to zero blocks
 	{
 		*Zero = (long)0x00;

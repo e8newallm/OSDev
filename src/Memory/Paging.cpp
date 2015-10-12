@@ -14,6 +14,8 @@
 
 #define GETTABLEADDR(x) (long)x & (long)TABLEADDRMASK
 
+#define ProcessMemStart 0xA00000
+
 void PageTableSetup(long* TableEntries)
 {
 	for(int x = 0; x < 512; x++)
@@ -26,6 +28,8 @@ class PageFile
 {
 	public:
 	long* Pages = 0x0;
+	
+	
 	bool MapAddress(unsigned long, unsigned long);
 	bool RawMapAddress(unsigned long, unsigned long);
 	void Activate();
@@ -180,7 +184,7 @@ unsigned long PageFile::GetFreeAddress()
 
 void PageFile::SetupStartMemory()
 {
-	for(unsigned long i = 0; i < 0xA00000; i += 0x1000)
+	for(unsigned long i = 0; i < ProcessMemStart; i += 0x1000)
 	{
 		MapAddress(i, i);
 	}

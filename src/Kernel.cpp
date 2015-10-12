@@ -4,18 +4,18 @@ double TimeSinceStartPart;
 #define CLI() __asm__("CLI");
 #define STI() __asm__("STI");
 unsigned char Hex[17] = "0123456789ABCDEF";
-
+unsigned char Dec[11] = "0123456789";
 #include "IO.cpp"
 #include "Serial.cpp"
 #include "Miscellaneous/Miscellaneous.cpp"
 #include "E820.h"
 #include "Memory/MemoryMap.cpp"
 #include "Memory/Paging.cpp"
-#include "Memory/Malloc.cpp"
 //#include "BasicFunctions.cpp"
 
 #include "Keyboard.cpp"
 #include "Process.cpp"
+#include "Memory/Malloc.cpp"
 
 #include "Video/Video.cpp"
 
@@ -40,38 +40,44 @@ multiboot_info_t* mbd;
 unsigned short MemoryModel;
 long TestVar;
 char* BDA = (char*)0x400;
-Process Halt, Test, TestTwo, TestTwoTwo;
+Process Halt, Test;
 
-volatile void SystemIdle()
+__attribute__((noinline)) volatile void SystemIdle() 
 {
-	//__asm__("MOV %0, %%RSP\r\n" : : "r"(Halt.RSP));
-	//__asm__("MOV %0, %%CR3\r\n" : : "r"(Halt.RSP)); //TODO: Change to Halt's CR3
-	//(Halt.Page).Activate();
-	//Popa();
 	while(1)
-		Serial.WriteString(0x1, "\r\nIdling");
+	{
+		__asm__("HLT");
+	}
 }
 
 volatile void TestProcess()
 {
-	long i = 0;
-	while(1)
+	Malloc(0x10000); 
+	void* Temp = Malloc(0x100); 
+	void* Temp2 = Malloc(0x100);
+	void* Temp3 = Malloc(0x100);
+	Malloc(0x100); 
+	Free(Temp);
+	Free(Temp3);
+	Free(Temp2);
+	
+	MBlockHeader* Check = (MBlockHeader*)CurrentProcess->StartBlock;
+	long Count = 0;
+	Serial.WriteString(0x1, "\r\n\r\nMemory Test Results");
+	while(Check->NextUsage != MBlockHeader_End)
 	{
-		i+=5;
-		Serial.WriteString(0x1, "\r\nAdding: ");
-		Serial.WriteLongHex(0x1, i);
+		Serial.WriteString(0x1, "\r\n\r\nBlock ");
+		Serial.WriteLong(0x1, Count);
+		Serial.WriteString(0x1, "\r\nUsage ");
+		Serial.WriteLongHex(0x1, Check->NextUsage);
+		Serial.WriteString(0x1, "\r\nSize ");
+		Serial.WriteLongHex(0x1, Check->NextSize);
+		Count++;
+		Check = (MBlockHeader*)((long)Check + Check->NextSize + sizeof(MBlockHeader));
 	}
-}
-
-volatile void TestProcessTwo()
-{
-	long i = 0;
-	while(1)
-	{
-		i-=5;
-		Serial.WriteString(0x1, "\r\nSubtracting: ");
-		Serial.WriteLongHex(0x1, i);
-	}
+	Serial.WriteString(0x1, "\r\nEnd of memory");
+	
+	while(1);
 }
 
 /////////////////////KERNEL START///////////////////////////
@@ -170,18 +176,14 @@ extern "C" void Kernel_Start()
 	//GUI = Video((vbe_mode_info_struct*)((long)mbd->vbe_mode_info));
 	Halt = Process((void*)&SystemIdle, PhysMemory.UseFreePhyAddr(), 250);
 	Test = Process((void*)&TestProcess, PhysMemory.UseFreePhyAddr(), 100);
-	TestTwo = Process((void*)&TestProcessTwo, PhysMemory.UseFreePhyAddr(), 150);
-	TestTwoTwo = Process((void*)&TestProcessTwo, PhysMemory.UseFreePhyAddr(), 150);
 	CurrentProcess = &Halt;
 	CurrentProcess->NextProcess = CurrentProcess;
 	Test.Start();
-	TestTwo.Start();
-	TestTwoTwo.Start();
 	//Enables multitasking and PIT(As well as other IRQs)
 	Multitasking = true;
 	Output8(PICM_Dat, 0xFC);
 	Output8(PICS_Dat, 0xFF);
-	Serial.WriteString(0x1, "\r\nStarting multitasking");
+	//Serial.WriteString(0x1, "\r\nStarting multitasking");
 	SystemIdle();
 }
 /////////////////////KERNEL END///////////////////////////

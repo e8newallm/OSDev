@@ -1,5 +1,19 @@
 extern long ProcessSwapData;
 extern "C" void ProcessSwitch(long* OldRSP, long* NewRSP, long* NewCR3);
+
+#define MBlockHeader_Free 0
+#define MBlockHeader_InUse 1
+#define MBlockHeader_Start (unsigned char)254
+#define MBlockHeader_End (unsigned char)255
+
+struct MBlockHeader 
+{
+	unsigned char PrevUsage;
+	long PrevSize;
+	long NextSize;
+	unsigned char NextUsage;
+} __attribute__((packed));
+
 class Process
 {
 public:
@@ -7,6 +21,8 @@ public:
 	long Duration, MaxDuration;
 	PageFile Page;
 	Process* NextProcess;
+	MBlockHeader* StartBlock;
+	MBlockHeader* EndBlock;
 	bool Killed;
 	Process();
 	Process(void*, void*, long);
@@ -25,16 +41,30 @@ Process::Process(void* Main, void* Stack, long DurationMax)
 	MaxDuration = DurationMax;
 	Page = PageFile();
 	Page.SetupStartMemory();
-	unsigned long PageStack = Page.GetFreeAddress();
+	unsigned long PageStack = ProcessMemStart;
 	unsigned long CurrentPage;
 	Page.MapAddress((unsigned long)Stack, PageStack);
+	Page.MapAddress((unsigned long)PhysMemory.UseFreePhyAddr(), (unsigned long)(ProcessMemStart + 0x1000));
 	asm volatile("MOV %%CR3, %0" : "=r"(CurrentPage));
-	RSP = (long*)((char*)PageStack + 0xFC7);
 	Page.Activate();
+	MBlockHeader* BlockSetup = (MBlockHeader*)(ProcessMemStart + 0x1000);
+	StartBlock = BlockSetup;
+	BlockSetup->PrevUsage = MBlockHeader_Start;
+	BlockSetup->PrevSize = 0;
+	BlockSetup->NextUsage = MBlockHeader_Free;
+	BlockSetup->NextSize = 0x1000 - (sizeof(MBlockHeader)*2);
+	BlockSetup = (MBlockHeader*)(((long)BlockSetup) + (0x1000 - sizeof(MBlockHeader)));
+	BlockSetup->PrevUsage = MBlockHeader_Free;
+	BlockSetup->PrevSize = 0x1000 - (sizeof(MBlockHeader)*2);
+	BlockSetup->NextUsage = MBlockHeader_End;
+	BlockSetup->NextSize = 0;
+	EndBlock = BlockSetup;
+	RSP = (long*)((char*)PageStack + 0xFC7);
 	RSP[6] = (long)Main;
 	RSP[5] = (long)((char*)PageStack + 0xFFF);
 	
 	asm volatile("MOV %0, %%CR3" : : "r"(CurrentPage));
+	
 	Killed = false;
 }
 
@@ -50,7 +80,6 @@ void Process::Start()
 
 extern "C" void SwitchProcesses()
 {
-	//Serial.WriteString(0x1, "\r\nRotating processes");
 	if(Multitasking)
 	{
 		Process* Next = CurrentProcess->NextProcess;
@@ -65,8 +94,6 @@ extern "C" void SwitchProcesses()
 		CurrentProcess = CurrentProcess->NextProcess;
 		CurrentProcess->Duration = 0;
 		STI();
-		//Serial.WriteString(0x1, "\r\nProcess switch RSP: ");
-		//Serial.WriteLongHex(0x1, (long)NextRSP);
 		ProcessSwitch(CurrentRSPAddress, NextRSP, NextPage);
 	}
 }

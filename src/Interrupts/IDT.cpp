@@ -98,7 +98,7 @@ extern "C" void KeyboardInterrupt()
 
 extern "C" void SystemTimerInterrupt()
 {
-	Serial.WriteString(0x1, "\r\nSystem Timer Interrupt start");
+	//Serial.WriteString(0x1, "\r\nSystem Timer Interrupt start");
 	TimeSinceStart += 50;
 	CurrentProcess->Duration += 50;
 	PICEndInt((char)0);

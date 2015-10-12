@@ -1,124 +1,114 @@
-//TODO: Add an option into Malloc for small allocations (Allocate a separate frame for variables of that size, and use a bitmap to track)
-extern bool PrintString(const char* String, char Colour);
-extern char* LongToStringHexTemp(long Number);
-extern PageFile Paging;
+#define MallocBucketLimit 0 //4kB or 4MB later
 
-MemorySeg* FindFirstBlock(unsigned long Size)
-{	//TODO: Improve the efficiency
-	unsigned long SizeCheck = Size + sizeof(BlockHeader);
-	for(long Pos = 0; PhysMemory[Pos] < PhysMemory.EOM(); Pos++)
+//Usage
+//0 = Free, 1 = InUse, 254 = Start, 255 = End
+void AddVMemory(unsigned long Size)
+{
+	int NewFrameCount = (Size / 0x1000) + 2;
+	int Current = 0;
+	MBlockHeader* PrevEnd = CurrentProcess->EndBlock;
+	while(Current < NewFrameCount)
 	{
-		if(PhysMemory[Pos]->LargestBlock >= SizeCheck && PhysMemory[Pos]->Usage == MEMORYSEG_INUSE)
-		{
-			return (PhysMemory.PhyMemMap + Pos);
-		}
+		CurrentProcess->EndBlock = (MBlockHeader*)(((long)CurrentProcess->EndBlock) + 0x1000);
+		CurrentProcess->Page.MapAddress((unsigned long)PhysMemory.UseFreePhyAddr(), (unsigned long)CurrentProcess->EndBlock);
+		Current++;
 	}
-	return PhysMemory.EOM();
+	if(PrevEnd->PrevUsage == MBlockHeader_Free)
+		PrevEnd = (MBlockHeader*)((long)PrevEnd - PrevEnd->PrevSize - sizeof(MBlockHeader));
+	PrevEnd->NextSize = ((long)CurrentProcess->EndBlock - (long)PrevEnd) - sizeof(MBlockHeader);
+	PrevEnd->NextUsage = MBlockHeader_Free;
+	(CurrentProcess->EndBlock)->PrevSize = ((long)CurrentProcess->EndBlock - (long)PrevEnd) - sizeof(MBlockHeader);
+	(CurrentProcess->EndBlock)->PrevUsage = MBlockHeader_Free;
+	(CurrentProcess->EndBlock)->NextUsage = MBlockHeader_End;
+	
+	MBlockHeader* Check = (MBlockHeader*)CurrentProcess->StartBlock;
+	long Count = 0;
+	Serial.WriteString(0x1, "\r\n\r\nMemory Test Results");
+	while(Check->NextUsage != MBlockHeader_End)
+	{
+		Serial.WriteString(0x1, "\r\n\r\nBlock ");
+		Serial.WriteLong(0x1, Count);
+		Serial.WriteString(0x1, "\r\nUsage ");
+		Serial.WriteLongHex(0x1, Check->NextUsage);
+		Serial.WriteString(0x1, "\r\nSize ");
+		Serial.WriteLongHex(0x1, Check->NextSize);
+		Serial.WriteString(0x1, "\r\nAddress ");
+		Serial.WriteLongHex(0x1, (long)Check);
+		Count++;
+		Check = (MBlockHeader*)((long)Check + Check->NextSize + sizeof(MBlockHeader));
+	}
+	Serial.WriteString(0x1, "\r\nEnd of memory");
+	
+	return;
 }
 
-MemorySeg* AllocateFrame()
+void* Malloc(unsigned long Size)
 {
-	MemorySeg* MMapPointer = PhysMemory.FindFreePhyAddr();
-	if(MMapPointer == PhysMemory.EOM())
+	//Serial.WriteString(0x1, "\r\nMalloc call");
+	if(Size > MallocBucketLimit) //If Size is too large to be used in the bucket memories
 	{
-		//Kernel_Panic("Out of Memory!");
-	}
-	PhysMemory.UsePhyAddr(MMapPointer);
-	return MMapPointer;
-}
-
-void* AllocateBlock(unsigned int Size, MemorySeg* MemorySegment)
-{
-	BlockHeader* FindBlock = (BlockHeader*)MemorySegment->BaseAddress;
-	unsigned int SizeCheck = Size + sizeof(BlockHeader);
-	while(!(FindBlock->Usage == BLOCKHEADER_FREE && FindBlock->Size >= SizeCheck))
-	{
-		FindBlock = (BlockHeader*)((long)FindBlock + FindBlock->Size + sizeof(BlockHeader));
-	}
-	unsigned int NextSize = FindBlock->Size - Size - sizeof(BlockHeader);
-	FindBlock->Size = Size;
-	FindBlock->Usage = BLOCKHEADER_INUSE;
-	BlockHeader* NextBlock = (BlockHeader*)((long)FindBlock + Size + sizeof(BlockHeader));
-	NextBlock->PrevSize = Size;
-	NextBlock->PrevUsage = BLOCKHEADER_INUSE;
-	NextBlock->Size = NextSize;
-	NextBlock->Usage = BLOCKHEADER_FREE;
-	NextBlock = (BlockHeader*)((long)NextBlock + NextSize + sizeof(BlockHeader));
-	NextBlock->PrevSize = NextSize;
-	NextBlock->PrevUsage = BLOCKHEADER_FREE;
-	MemorySegment->LargestBlock = 0;
-	for(BlockHeader* Largest = (BlockHeader*)MemorySegment->BaseAddress;
-		(long)Largest < MemorySegment->BaseAddress + PhysMemory.MemorySegSize;
-		Largest = (BlockHeader*)((long)Largest + Largest->Size + sizeof(BlockHeader)))
-	{
-		if(!Largest->Usage && Largest->Size > MemorySegment->LargestBlock)
+		MBlockHeader* Check = CurrentProcess->StartBlock;
+		//Serial.WriteString(0x1, "\r\nTest. PrevUsage: ");
+		//Serial.WriteLongHex(0x1, Check->PrevUsage);
+		while(1)
 		{
-			MemorySegment->LargestBlock = Largest->Size;
-		}
-	}
-	return (void*)((long)FindBlock + sizeof(BlockHeader));
-}
-
-void* malloc(unsigned int Size)
-{
-	if(Size + sizeof(BlockHeader) < PhysMemory.MemorySegSize)
-	{
-		MemorySeg* MemFrame = FindFirstBlock(Size);
-		if(MemFrame == PhysMemory.EOM())
-		{
-			MemFrame = AllocateFrame();
-			unsigned long Address = Paging.GetFreeAddress();
-			Paging.MapAddress((MemFrame->BaseAddress), Address);
-			BlockHeader* Block = (BlockHeader*)Address;
-			Block->PrevSize = 0;
-			Block->PrevUsage = BLOCKHEADER_SOB;
-			Block->Usage = BLOCKHEADER_INUSE;
-			Block->Size = Size;
-			BlockHeader* NextBlock = (BlockHeader*)((long)Block + Size + sizeof(BlockHeader));
-			NextBlock->PrevSize = Size;
-			NextBlock->PrevUsage = BLOCKHEADER_INUSE;
-			NextBlock->Usage = BLOCKHEADER_FREE;
-			NextBlock->Size = PhysMemory.MemorySegSize - (3*sizeof(BlockHeader)) - Size;
-			BlockHeader* FinalBlock = (BlockHeader*)(Address + PhysMemory.MemorySegSize - sizeof(BlockHeader));
-			FinalBlock->PrevSize = NextBlock->Size;
-			FinalBlock->PrevUsage = BLOCKHEADER_FREE;
-			FinalBlock->Usage = BLOCKHEADER_EOB;
-			FinalBlock->Size = 0;
-			MemFrame->LargestBlock = 0;
-			for(BlockHeader* Largest = (BlockHeader*)Address;
-				(unsigned long)Largest < (MemFrame->BaseAddress + PhysMemory.MemorySegSize);
-				Largest = (BlockHeader*)((unsigned long)Largest + Largest->Size + sizeof(BlockHeader)))
+			if(Check->NextUsage == MBlockHeader_Free)
 			{
-				if(!Largest->Usage && Largest->Size > MemFrame->LargestBlock)
+				//Serial.WriteString(0x1, "\r\nFree block. Check Size: ");
+				//Serial.WriteLongHex(0x1, Check->NextSize);
+				//Serial.WriteString(0x1, " Size: ");
+				//Serial.WriteLongHex(0x1, Size);
+			}
+			if(Check->NextUsage == MBlockHeader_Free && Check->NextSize >= Size)
+			{
+				//Serial.WriteString(0x1, "\r\nBlock found");
+				if(Check->NextSize == Size)
 				{
-					MemFrame->LargestBlock = Largest->Size;
+					//Serial.WriteString(0x1, "\r\nBlock exact size");
+					Check->NextUsage = MBlockHeader_InUse;
+					((MBlockHeader*)((long)Check + Check->NextSize + sizeof(MBlockHeader)))->PrevUsage = MBlockHeader_InUse;
+					return (void*)((long)Check + sizeof(MBlockHeader));
+				}
+				else if(Check->NextSize > Size)
+				{
+					//Serial.WriteString(0x1, "\r\nBlock larger");
+					Check->NextUsage = MBlockHeader_InUse;
+					MBlockHeader* FinalBlock = (MBlockHeader*)((long)Check + Check->NextSize + sizeof(MBlockHeader));
+					Check->NextSize = Size;
+					MBlockHeader* NextBlock = (MBlockHeader*)((long)Check + Check->NextSize + sizeof(MBlockHeader));
+					NextBlock->PrevSize = Size;
+					NextBlock->PrevUsage = MBlockHeader_InUse;
+					NextBlock->NextUsage = MBlockHeader_Free;
+					NextBlock->NextSize = ((long)FinalBlock - (long)NextBlock - sizeof(MBlockHeader));
+					FinalBlock->PrevSize = ((long)FinalBlock - (long)NextBlock - sizeof(MBlockHeader));
+					return (void*)((long)Check + sizeof(MBlockHeader));
 				}
 			}
-			MemFrame->LargestBlock = NextBlock->Size;
-			return (void*)((long)Block + (long)sizeof(BlockHeader));
-		}
-		else
-		{
-			return AllocateBlock(Size, MemFrame);
+			//Serial.WriteString(0x1, "\r\nNext block");
+			if(Check->NextUsage == MBlockHeader_End)
+			{
+				if(Check->PrevUsage == MBlockHeader_Free)
+					Check = (MBlockHeader*)((long)Check - Check->PrevSize - sizeof(MBlockHeader));
+				AddVMemory(Size);
+			}
+			else
+				Check = (MBlockHeader*)((long)Check + Check->NextSize + sizeof(MBlockHeader));
 		}
 	}
 }
 
-void free(void* Data)
+//TODO: Add in code to cope with program being loaded in before heap
+
+void Free(void* Pointer) 
 {
-	BlockHeader* HeaderChange = (BlockHeader*)((long)Data - sizeof(BlockHeader));
-	BlockHeader* SecondHeader = (BlockHeader*)((long)HeaderChange + HeaderChange->Size + sizeof(BlockHeader));
-	if(HeaderChange->PrevUsage == BLOCKHEADER_FREE)
-		HeaderChange = (BlockHeader*)((long) HeaderChange - sizeof(BlockHeader) - HeaderChange->PrevSize);
-	if(SecondHeader->Usage == BLOCKHEADER_FREE)
-		SecondHeader = (BlockHeader*)((long) SecondHeader + sizeof(BlockHeader) + SecondHeader->Size);
-	long Size = ((long)SecondHeader - (long)HeaderChange - sizeof(BlockHeader));
-	HeaderChange->Size = Size;
-	HeaderChange->Usage = BLOCKHEADER_FREE;
-	SecondHeader->PrevSize = Size;
-	SecondHeader->PrevUsage = BLOCKHEADER_FREE;
-	for(char* Pointer = (char*)((long)HeaderChange + sizeof(BlockHeader)); Pointer < (char*)SecondHeader; Pointer++)
-	{
-		*Pointer = 0;
-	}
+	MBlockHeader* FirstBlock = (MBlockHeader*)((long)Pointer - sizeof(MBlockHeader));
+	MBlockHeader* LastBlock = (MBlockHeader*)((long)FirstBlock + FirstBlock->NextSize + sizeof(MBlockHeader));
+	if(FirstBlock->PrevUsage == MBlockHeader_Free)
+		FirstBlock = (MBlockHeader*)((long)FirstBlock - FirstBlock->PrevSize - sizeof(MBlockHeader));
+	if(LastBlock->NextUsage == MBlockHeader_Free)
+		LastBlock = (MBlockHeader*)((long)LastBlock + LastBlock->NextSize + sizeof(MBlockHeader));
+	FirstBlock->NextSize = (long)LastBlock - (long)FirstBlock - sizeof(MBlockHeader);
+	FirstBlock->NextUsage = MBlockHeader_Free;
+	LastBlock->PrevSize = (long)LastBlock - (long)FirstBlock - sizeof(MBlockHeader);
+	LastBlock->PrevUsage = MBlockHeader_Free;
 }

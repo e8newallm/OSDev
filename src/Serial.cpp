@@ -17,6 +17,7 @@ class SerialController
 	bool WriteString(short, char*);
 	bool WriteString(short, const char*);
 	bool WriteLongHex(short, long);
+	bool WriteLong(short, long);
 	int PortAvail(short);
 	short GetPort(int);
 };
@@ -101,6 +102,32 @@ bool SerialController::WriteLongHex(short COMPort, long Value)
 	
 	WriteChar(COMPort, '0');
 	WriteChar(COMPort, 'x');
+	for(Pos--; Pos >= 0; Pos--)
+	{
+		WriteChar(COMPort, Output[Pos]);
+	}
+	STI();
+	return true;
+}
+
+bool SerialController::WriteLong(short COMPort, long Value)
+{
+	CLI();
+	char Output[10];
+	int Pos = 0;
+	unsigned long Temp = Value;
+	if(Value == 0)
+	{
+		WriteChar(COMPort, '0');
+		return true;
+	}
+	while(Temp != 0)
+	{
+		Output[Pos] = Dec[Temp % 10];
+		Temp /= 10;
+		Pos++;
+	}
+	
 	for(Pos--; Pos >= 0; Pos--)
 	{
 		WriteChar(COMPort, Output[Pos]);
