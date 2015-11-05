@@ -14,7 +14,7 @@
 
 #define GETTABLEADDR(x) (long)x & (long)TABLEADDRMASK
 
-#define ProcessMemStart 0xA00000
+#define ProcessMemStart 0x2000000
 
 void PageTableSetup(long* TableEntries)
 {

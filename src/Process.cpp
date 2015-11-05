@@ -21,6 +21,7 @@ public:
 	long Duration, MaxDuration;
 	PageFile Page;
 	Process* NextProcess;
+	void* MemStart;
 	MBlockHeader* StartBlock;
 	MBlockHeader* EndBlock;
 	bool Killed;
@@ -43,6 +44,7 @@ Process::Process(void* Main, void* Stack, long DurationMax)
 	Page.SetupStartMemory();
 	unsigned long PageStack = ProcessMemStart;
 	unsigned long CurrentPage;
+	MemStart = (void*)(ProcessMemStart + 0x1000);
 	Page.MapAddress((unsigned long)Stack, PageStack);
 	Page.MapAddress((unsigned long)PhysMemory.UseFreePhyAddr(), (unsigned long)(ProcessMemStart + 0x1000));
 	asm volatile("MOV %%CR3, %0" : "=r"(CurrentPage));
@@ -59,8 +61,8 @@ Process::Process(void* Main, void* Stack, long DurationMax)
 	BlockSetup->NextUsage = MBlockHeader_End;
 	BlockSetup->NextSize = 0;
 	EndBlock = BlockSetup;
-	RSP = (long*)((char*)PageStack + 0xFC7);
-	RSP[6] = (long)Main;
+	RSP = (long*)((char*)PageStack + (0xFFF - (8 * 13)));
+	RSP[13] = (long)Main;
 	RSP[5] = (long)((char*)PageStack + 0xFFF);
 	
 	asm volatile("MOV %0, %%CR3" : : "r"(CurrentPage));
@@ -80,6 +82,8 @@ void Process::Start()
 
 extern "C" void SwitchProcesses()
 {
+	asm("PUSH %RDI; PUSH %RSI; PUSH %RDX");
+	//Serial.WriteString(0x1, "\r\nSwap process");
 	if(Multitasking)
 	{
 		Process* Next = CurrentProcess->NextProcess;
@@ -93,8 +97,8 @@ extern "C" void SwitchProcesses()
 		long* NextPage = (Next->Page).Pages;
 		CurrentProcess = CurrentProcess->NextProcess;
 		CurrentProcess->Duration = 0;
-		STI();
 		ProcessSwitch(CurrentRSPAddress, NextRSP, NextPage);
+		asm("POP %RDX; POP %RSI; POP %RDI");
 	}
 }
 

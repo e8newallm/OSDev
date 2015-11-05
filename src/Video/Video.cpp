@@ -59,13 +59,20 @@ void Video::DrawRect(unsigned int x, unsigned int y, unsigned int Width, unsigne
 
 void Video::Update()
 {
-	long End = BytesPerLine * Height / 8;
-	long* MainFrame = (long*)FrameAddress;
-	long* NewFrame = (long*)SecondFrameAddress;
-	for(int i = 0; i < End; i++)
-	{
-		MainFrame[i] = NewFrame[i];
-	}
+	char* NewFrame = (char*)SecondFrameAddress;
+	char* MainFrame = (char*)FrameAddress;
+	//for(int i = 0; i < End; i++)
+	//{
+		for(int i = 0; i < Height; i++)
+		{
+			for(int j = 0; j < Width*3; j++)
+			{
+				int pos = (i * BytesPerLine) + j;
+				MainFrame[pos] = NewFrame[pos];
+			}
+		}
+		//MainFrame[i] = NewFrame[i];
+	//}
 }
 
 Video::Video()

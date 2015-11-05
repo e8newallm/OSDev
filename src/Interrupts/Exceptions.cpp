@@ -68,6 +68,9 @@ extern "C" void GenProtExc()
 
 extern "C" void PageFaultExc()
 {
+	CLI();
+	Output8(0x21, 0xFF); //Masking the PIC Master/Slave to stop all IRQs
+	Output8(0xA1, 0xFF);
 	char ErrorCode;
 	long VirtualAddr;
 	asm volatile("MOV %%AL, %0"
@@ -78,6 +81,17 @@ extern "C" void PageFaultExc()
 	Serial.WriteLongHex(0x1, (long)ErrorCode);
 	Serial.WriteString(0x1, " Virtual address: ");
 	Serial.WriteLongHex(0x1, VirtualAddr);
+	Serial.WriteString(0x1, "\r\nStack");
+	long Temp = 0;
+	for(int i = 0; i < 20; i++)
+	{
+		Serial.WriteString(0x1, "\r\n");
+		Serial.WriteLongHex(0x1, i);
+		Serial.WriteString(0x1, ": ");
+		asm volatile("POP %0"
+		: "=a"(Temp));
+		Serial.WriteLongHex(0x1, Temp);
+	}
 	Kernel_Panic("Page fault error (0xE)");
 }
 

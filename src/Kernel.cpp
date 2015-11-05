@@ -32,52 +32,108 @@ int Header[12] __attribute__((section (".Multiboot"))) =
 
 char* StackBase = (char*)0x001F000;
 char* StackBottom = (char*)0x001D000;
+void* KernelMemoryEnd = (void*)0x1FFFFFF;
 char extern KernelStart;
 char extern KernelEnd;
 long* IDTPos;
 multiboot_info_t* mbd;
 //SerialController Serial;
 unsigned short MemoryModel;
-long TestVar;
 char* BDA = (char*)0x400;
-Process Halt, Test;
+Process Halt, Test, GraphDriver;
 
 __attribute__((noinline)) volatile void SystemIdle() 
 {
 	while(1)
 	{
+		//Serial.WriteString(0x1, "\r\nIdling");
 		__asm__("HLT");
 	}
 }
 
-volatile void TestProcess()
+__attribute__((noinline)) volatile void Graphics()
 {
-	Malloc(0x10000); 
-	void* Temp = Malloc(0x100); 
-	void* Temp2 = Malloc(0x100);
-	void* Temp3 = Malloc(0x100);
-	Malloc(0x100); 
-	Free(Temp);
-	Free(Temp3);
-	Free(Temp2);
-	
-	MBlockHeader* Check = (MBlockHeader*)CurrentProcess->StartBlock;
-	long Count = 0;
-	Serial.WriteString(0x1, "\r\n\r\nMemory Test Results");
-	while(Check->NextUsage != MBlockHeader_End)
+	STI();
+	Serial.WriteString(0x1, "\r\nMap main video memory. Size: ");
+	Serial.WriteLongHex(0x1, (long)GUI.BytesPerLine * GUI.Height);
+	for(unsigned long i = 0; i <= GUI.BytesPerLine * GUI.Height; i += 0x1000)
 	{
-		Serial.WriteString(0x1, "\r\n\r\nBlock ");
-		Serial.WriteLong(0x1, Count);
-		Serial.WriteString(0x1, "\r\nUsage ");
-		Serial.WriteLongHex(0x1, Check->NextUsage);
-		Serial.WriteString(0x1, "\r\nSize ");
-		Serial.WriteLongHex(0x1, Check->NextSize);
-		Count++;
-		Check = (MBlockHeader*)((long)Check + Check->NextSize + sizeof(MBlockHeader));
+		GraphDriver.Page.MapAddress(((unsigned long)GUI.FrameAddress + i), ((long)GraphDriver.MemStart) + i);
 	}
-	Serial.WriteString(0x1, "\r\nEnd of memory");
-	
-	while(1);
+	GUI.FrameAddress = (unsigned char*)((long)GraphDriver.MemStart);
+	char shade = 255;
+	char* MainFrame = (char*)GUI.FrameAddress;
+	char* NewFrame = (char*)GUI.SecondFrameAddress;
+	Serial.WriteString(0x1, "\r\nFrame Address: ");
+	Serial.WriteLongHex(0x1, (long)GUI.FrameAddress);
+	/*while(1)
+	{
+		//Serial.WriteString(0x1, "\r\nStart drawing");
+		for(int i = 0; i < GUI.Height; i++)
+		{
+			for(int j = 0; j < GUI.Width*3; j++)
+			{
+				MainFrame[(i * GUI.BytesPerLine) + j] = shade;
+				shade -= 5;
+			}
+		}
+		//Serial.WriteString(0x1, "\r\nDone drawing");
+	}*/
+	while(1)
+	{
+		//Serial.WriteString(0x1, "\r\nUpdating Graphics");
+		for(int i = 0; i < GUI.Height; i++)
+		{
+			for(int j = 0; j < (GUI.Width*GUI.Depth); j++)
+			{
+				int pos = (i * GUI.BytesPerLine) + j;
+				MainFrame[pos] = NewFrame[pos];
+			}
+		}
+		/*for(int i = 0; i < End; i++)
+		{
+			MainFrame[i] = NewFrame[i];
+		}*/
+		SwitchProcesses();
+	}
+}
+
+__attribute__((noinline)) volatile void TestProcess()
+{
+	STI();
+	int x = 214, y = 532;
+	int xVel = 15, yVel = 18;
+	while(1)
+	{
+		//Serial.WriteString(0x1, "\r\nTesting");
+		long Width = GUI.Width, Height = GUI.Height;
+		GUI.DrawPixel(x, y, (char)(128+y), (char)(50+y), (char)(75+y));
+		x++;
+		y++;
+		//DrawString("Test string", 11, x, y);
+		x += xVel;
+		y += yVel;
+		if(x < 0)
+		{
+			x = 0;
+			xVel = -xVel;
+		}
+		else if(x > GUI.Width)
+		{
+			x = GUI.Width;
+			xVel = -xVel;
+		}
+		if(y < 0)
+		{
+			y = 0;
+			yVel = -yVel;
+		}
+		else if(y > GUI.Height)
+		{
+			y = GUI.Height;
+			yVel = -yVel;
+		}
+	}
 }
 
 /////////////////////KERNEL START///////////////////////////
@@ -135,7 +191,7 @@ extern "C" void Kernel_Start()
 	Output8(0x40, 0xE9); //set higher byte 0x00
 	__asm__("MOV (Pointer), %eax; LIDT (%eax);sti");
 	
-	for(MemorySeg* Position = PhysMemory.FindPhyAddr((void*)0x0); Position <= PhysMemory.FindPhyAddr((void*)0xA00000); Position++)
+	for(MemorySeg* Position = PhysMemory.FindPhyAddr((void*)0x0); Position <= PhysMemory.FindPhyAddr(KernelMemoryEnd); Position++)
 	{
 		PhysMemory.UsePhyAddr(Position, MEMORYSEG_LOCKED); 
 	}
@@ -173,13 +229,29 @@ extern "C" void Kernel_Start()
 	
 	//Serial.WriteString(0x1, "\r\nStarting Video setup");
 	//Graphics setup
-	//GUI = Video((vbe_mode_info_struct*)((long)mbd->vbe_mode_info));
-	Halt = Process((void*)&SystemIdle, PhysMemory.UseFreePhyAddr(), 250);
+	GUI = Video((vbe_mode_info_struct*)((long)mbd->vbe_mode_info));
+	unsigned long End = 0xA00000;
+	GUI.SecondFrameAddress = (unsigned char*)End;
+	//Map the secondary buffer
+	Serial.WriteString(0x1, "\r\nSetup main graphics buffer");
+	for(unsigned long i = End; i <= End + (GUI.BytesPerLine * GUI.Height); i += 0x1000)
+	{
+		MemorySeg* NextFrame = PhysMemory.FindFreePhyAddr();
+		PhysMemory.UsePhyAddr(NextFrame, MEMORYSEG_LOCKED); 
+		Paging.MapAddress(NextFrame->BaseAddress, i);
+		
+	}
+	Serial.WriteString(0x1, "\r\nDone! ");
+	
+	Halt = Process((void*)&SystemIdle, PhysMemory.UseFreePhyAddr(), 50);
 	Test = Process((void*)&TestProcess, PhysMemory.UseFreePhyAddr(), 100);
 	CurrentProcess = &Halt;
 	CurrentProcess->NextProcess = CurrentProcess;
 	Test.Start();
+	GraphDriver = Process((void*)&Graphics, PhysMemory.UseFreePhyAddr(), 150);
+	GraphDriver.Start();
 	//Enables multitasking and PIT(As well as other IRQs)
+	
 	Multitasking = true;
 	Output8(PICM_Dat, 0xFC);
 	Output8(PICS_Dat, 0xFF);
