@@ -1,7 +1,7 @@
 .code64
 .section .text
 	
-.global ProcessSwitch, RotateProcesses
+.global ProcessSwitch
 
 #RDI = (CurrentProcess->RSP)'s address
 #RSI = NextProcess->RSP
@@ -12,6 +12,9 @@ ProcessSwitch:
 	PUSH %RCX
 	PUSH %RBP
 	PUSH %RBX
+	PUSH %RDX
+	PUSH %RSI
+	PUSH %RDI
 	PUSH %R8
 	PUSH %R9
 	PUSH %R10
@@ -35,6 +38,9 @@ ProcessSwitch:
 	POP %R10
 	POP %R9
 	POP %R8
+	POP %RDI
+	POP %RSI
+	POP %RDX
 	POP %RBX
 	POP %RBP
 	POP %RCX

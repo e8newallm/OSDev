@@ -1,6 +1,8 @@
 long TimeSinceStart;
-double TimeSinceStartPart;
-
+long TimeSinceStartPart;
+char TempStack[0x1000];
+bool Multitasking = false;
+bool Testing = false;
 #define CLI() __asm__("CLI");
 #define STI() __asm__("STI");
 unsigned char Hex[17] = "0123456789ABCDEF";
@@ -29,56 +31,28 @@ int Header[12] __attribute__((section (".Multiboot"))) =
 	0x00000000, 0x00000000, 0x00000000,
 	1024, 768, 24
 };
-
-char* StackBase = (char*)0x001F000;
-char* StackBottom = (char*)0x001D000;
 void* KernelMemoryEnd = (void*)0x1FFFFFF;
+char* StackBase = (char*)0x001F000;
 char extern KernelStart;
 char extern KernelEnd;
 long* IDTPos;
 multiboot_info_t* mbd;
-//SerialController Serial;
-unsigned short MemoryModel;
 char* BDA = (char*)0x400;
 Process Halt, Test, GraphDriver;
-
-__attribute__((noinline)) volatile void SystemIdle() 
-{
-	while(1)
-	{
-		//Serial.WriteString(0x1, "\r\nIdling");
-		__asm__("HLT");
-	}
-}
+PageFile KernelMem; // The kernel memory
 
 __attribute__((noinline)) volatile void Graphics()
 {
-	STI();
-	Serial.WriteString(0x1, "\r\nMap main video memory. Size: ");
-	Serial.WriteLongHex(0x1, (long)GUI.BytesPerLine * GUI.Height);
 	for(unsigned long i = 0; i <= GUI.BytesPerLine * GUI.Height; i += 0x1000)
 	{
 		GraphDriver.Page.MapAddress(((unsigned long)GUI.FrameAddress + i), ((long)GraphDriver.MemStart) + i);
 	}
+	//Serial.WriteString(0x1, "\r\nDone");
 	GUI.FrameAddress = (unsigned char*)((long)GraphDriver.MemStart);
 	char shade = 255;
 	char* MainFrame = (char*)GUI.FrameAddress;
 	char* NewFrame = (char*)GUI.SecondFrameAddress;
-	Serial.WriteString(0x1, "\r\nFrame Address: ");
-	Serial.WriteLongHex(0x1, (long)GUI.FrameAddress);
-	/*while(1)
-	{
-		//Serial.WriteString(0x1, "\r\nStart drawing");
-		for(int i = 0; i < GUI.Height; i++)
-		{
-			for(int j = 0; j < GUI.Width*3; j++)
-			{
-				MainFrame[(i * GUI.BytesPerLine) + j] = shade;
-				shade -= 5;
-			}
-		}
-		//Serial.WriteString(0x1, "\r\nDone drawing");
-	}*/
+	//Serial.WriteString(0x1, "\r\nWhile(1)");
 	while(1)
 	{
 		//Serial.WriteString(0x1, "\r\nUpdating Graphics");
@@ -90,26 +64,33 @@ __attribute__((noinline)) volatile void Graphics()
 				MainFrame[pos] = NewFrame[pos];
 			}
 		}
-		/*for(int i = 0; i < End; i++)
-		{
-			MainFrame[i] = NewFrame[i];
-		}*/
 		SwitchProcesses();
 	}
 }
 
 __attribute__((noinline)) volatile void TestProcess()
 {
-	STI();
+	//Serial.WriteString(0x1, "\r\nGraphics Loaded!");
 	int x = 214, y = 532;
 	int xVel = 15, yVel = 18;
+	long Width = GUI.Width, Height = GUI.Height;
+	long Time = TimeSinceStart;
 	while(1)
 	{
 		//Serial.WriteString(0x1, "\r\nTesting");
-		long Width = GUI.Width, Height = GUI.Height;
-		GUI.DrawPixel(x, y, (char)(128+y), (char)(50+y), (char)(75+y));
-		x++;
-		y++;
+		GUI.DrawPixel(x, y, (char)(128), (char)(50), (char)(75));
+		GUI.DrawPixel(x+1, y, (char)(128), (char)(50), (char)(75));
+		GUI.DrawPixel(x, y+1, (char)(128), (char)(50), (char)(75));
+		GUI.DrawPixel(x+1, y+1, (char)(128), (char)(50), (char)(75));
+		//while(TimeSinceStart - Time < 500)
+		//{
+			SwitchProcesses();
+		//}
+		Time = TimeSinceStart;
+		GUI.DrawPixel(x, y, (char)(0), (char)(0), (char)(0));
+		GUI.DrawPixel(x+1, y, (char)(0), (char)(0), (char)(0));
+		GUI.DrawPixel(x, y+1, (char)(0), (char)(0), (char)(0));
+		GUI.DrawPixel(x+1, y+1, (char)(0), (char)(0), (char)(0));
 		//DrawString("Test string", 11, x, y);
 		x += xVel;
 		y += yVel;
@@ -136,14 +117,129 @@ __attribute__((noinline)) volatile void TestProcess()
 	}
 }
 
+__attribute__((noinline)) volatile void TestProcessTwo()
+{
+	//Serial.WriteString(0x1, "\r\nGraphics Loaded!");
+	int x = 214, y = 532;
+	int xVel = -15, yVel = -18;
+	long Width = GUI.Width, Height = GUI.Height;
+	long Time = TimeSinceStart;
+	while(1)
+	{
+		//Serial.WriteString(0x1, "\r\nTesting");
+		GUI.DrawPixel(x, y, (char)(128), (char)(50), (char)(75));
+		GUI.DrawPixel(x+1, y, (char)(128), (char)(50), (char)(75));
+		GUI.DrawPixel(x, y+1, (char)(128), (char)(50), (char)(75));
+		GUI.DrawPixel(x+1, y+1, (char)(128), (char)(50), (char)(75));
+		//while(TimeSinceStart - Time < 500)
+		//{
+			SwitchProcesses();
+		//}
+		Time = TimeSinceStart;
+		GUI.DrawPixel(x, y, (char)(0), (char)(0), (char)(0));
+		GUI.DrawPixel(x+1, y, (char)(0), (char)(0), (char)(0));
+		GUI.DrawPixel(x, y+1, (char)(0), (char)(0), (char)(0));
+		GUI.DrawPixel(x+1, y+1, (char)(0), (char)(0), (char)(0));
+		//DrawString("Test string", 11, x, y);
+		x += xVel;
+		y += yVel;
+		if(x < 0)
+		{
+			x = 0;
+			xVel = -xVel;
+		}
+		else if(x > GUI.Width)
+		{
+			x = GUI.Width;
+			xVel = -xVel;
+		}
+		if(y < 0)
+		{
+			y = 0;
+			yVel = -yVel;
+		}
+		else if(y > GUI.Height)
+		{
+			y = GUI.Height;
+			yVel = -yVel;
+		}
+	}
+}
+
+__attribute__((noinline)) volatile void TestProcessThree()
+{
+	Serial.WriteString(0x1, "\r\nTesting return shit");
+	return;
+	int x = 400, y = 700;
+	int xVel = -15, yVel = -2;
+	long Width = GUI.Width, Height = GUI.Height;
+	long Time = TimeSinceStart;
+	while(1)
+	{
+		//Serial.WriteString(0x1, "\r\nTesting");
+		GUI.DrawPixel(x, y, (char)(128), (char)(50), (char)(75));
+		GUI.DrawPixel(x+1, y, (char)(128), (char)(50), (char)(75));
+		GUI.DrawPixel(x, y+1, (char)(128), (char)(50), (char)(75));
+		GUI.DrawPixel(x+1, y+1, (char)(128), (char)(50), (char)(75));
+		//while(TimeSinceStart - Time < 500)
+		//{
+			SwitchProcesses();
+		//}
+		Time = TimeSinceStart;
+		GUI.DrawPixel(x, y, (char)(0), (char)(0), (char)(0));
+		GUI.DrawPixel(x+1, y, (char)(0), (char)(0), (char)(0));
+		GUI.DrawPixel(x, y+1, (char)(0), (char)(0), (char)(0));
+		GUI.DrawPixel(x+1, y+1, (char)(0), (char)(0), (char)(0));
+		//DrawString("Test string", 11, x, y);
+		x += xVel;
+		y += yVel;
+		if(x < 0)
+		{
+			x = 0;
+			xVel = -xVel;
+		}
+		else if(x > GUI.Width)
+		{
+			x = GUI.Width;
+			xVel = -xVel;
+		}
+		if(y < 0)
+		{
+			y = 0;
+			yVel = -yVel;
+		}
+		else if(y > GUI.Height)
+		{
+			y = GUI.Height;
+			yVel = -yVel;
+		}
+	}
+}
+
+__attribute__((noinline)) volatile void SystemIdle() 
+{
+	//Serial.WriteString(0x1, "\r\nStarting Graphics");
+	GraphDriver.Start();
+	
+	Test.Start();
+	Test.StartThread(Test.CreateThread((void*)&TestProcessTwo, 10));
+	Test.StartThread(Test.CreateThread((void*)&TestProcessThree, 10));
+	while(1)
+	{
+		//Serial.WriteString(0x1, "\r\nIdling");
+		//Serial.WriteString(0x1, "\r\nSwapping");
+		SwitchProcesses();
+	}
+}
+
 /////////////////////KERNEL START///////////////////////////
 extern "C" void Kernel_Start()
 {
 	__asm__("PUSH %RAX; MOV $0x10, %RAX;MOV %RAX, %DS; MOV %RAX, %SS; POP %RAX"); 
-	
+	CLI();
 	//Setup Serial ports
 	Serial.Setup(BDA);
-	
+	Serial.WriteString(0x1, "Serial started!\r\n");
 	//Setting up memory map
 	PhysMemory.Initialise(mbd, (MemorySeg*)&KernelEnd, 0x1000);
 	MemorySeg* LoopChk = PhysMemory.FindPhyAddr(&KernelEnd);
@@ -185,10 +281,9 @@ extern "C" void Kernel_Start()
 	SetGate(0x21, &KeyboardInt, 0b10001110);
 	TimeSinceStart = 0;
 	
-	//Set IRQ 0 to trigger every 50 microseconds
-	Output8(0x43, 0b00110100); //Set counter 0 to Rate Generator
-	Output8(0x40, 0x0B); //Set lower byte 0x3C
-	Output8(0x40, 0xE9); //set higher byte 0x00
+	Output8(0x43, 0b00110000); //Set counter 0 to Interrupt On Terminal Count 
+	Output8(0x40, 0x4E); //Set lower byte 0x4E
+	Output8(0x40, 0x17); //set higher byte 0x17
 	__asm__("MOV (Pointer), %eax; LIDT (%eax);sti");
 	
 	for(MemorySeg* Position = PhysMemory.FindPhyAddr((void*)0x0); Position <= PhysMemory.FindPhyAddr(KernelMemoryEnd); Position++)
@@ -227,35 +322,25 @@ extern "C" void Kernel_Start()
 	}
 	Paging.Activate();
 	
-	//Serial.WriteString(0x1, "\r\nStarting Video setup");
 	//Graphics setup
 	GUI = Video((vbe_mode_info_struct*)((long)mbd->vbe_mode_info));
 	unsigned long End = 0xA00000;
 	GUI.SecondFrameAddress = (unsigned char*)End;
-	//Map the secondary buffer
-	Serial.WriteString(0x1, "\r\nSetup main graphics buffer");
-	for(unsigned long i = End; i <= End + (GUI.BytesPerLine * GUI.Height); i += 0x1000)
-	{
-		MemorySeg* NextFrame = PhysMemory.FindFreePhyAddr();
-		PhysMemory.UsePhyAddr(NextFrame, MEMORYSEG_LOCKED); 
-		Paging.MapAddress(NextFrame->BaseAddress, i);
-		
-	}
-	Serial.WriteString(0x1, "\r\nDone! ");
-	
-	Halt = Process((void*)&SystemIdle, PhysMemory.UseFreePhyAddr(), 50);
-	Test = Process((void*)&TestProcess, PhysMemory.UseFreePhyAddr(), 100);
-	CurrentProcess = &Halt;
+	Serial.WriteString(0x1, "Size of graphics frame: ");
+	Serial.WriteLongHex(0x1, (long)(GUI.BytesPerLine * GUI.Height));
+	Halt = Process((void*)&SystemIdle, 20, "Idle Process", &Halt);
+	CurrentProcess = &(Halt.ThreadList[0]);
 	CurrentProcess->NextProcess = CurrentProcess;
-	Test.Start();
-	GraphDriver = Process((void*)&Graphics, PhysMemory.UseFreePhyAddr(), 150);
-	GraphDriver.Start();
+	Serial.WriteString(0x1, "\r\nSetting up test");
+	Test = Process((void*)&TestProcess, 10, "Test Program", &Test);
+	Serial.WriteString(0x1, "\r\nSetting up graphics");
+	GraphDriver = Process((void*)&Graphics, 10, "Graphics Process", &GraphDriver);
+
 	//Enables multitasking and PIT(As well as other IRQs)
-	
-	Multitasking = true;
 	Output8(PICM_Dat, 0xFC);
 	Output8(PICS_Dat, 0xFF);
-	//Serial.WriteString(0x1, "\r\nStarting multitasking");
-	SystemIdle();
+	Multitasking = true;
+	Serial.WriteString(0x1, "\r\nStarting processes");
+	StartProcesses();
 }
 /////////////////////KERNEL END///////////////////////////

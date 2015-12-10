@@ -2,14 +2,26 @@ extern SerialController Serial;
 
 void Kernel_Panic(char* Reason)
 {
-	Serial.WriteString(0x1, "\r\nKernel panic: ");
-	Serial.WriteString(0x1, Reason);
+	CLI();
 	Output8(0x21, 0xFF); //Masking the PIC Master/Slave to stop all IRQs
 	Output8(0xA1, 0xFF);
-	while(1)
+	Serial.WriteString(0x1, "\r\nStack");
+	long Temp = 0;
+	for(int i = 0; i < 15; i++)
 	{
-		asm("nop");
+		Serial.WriteString(0x1, "\r\n");
+		Serial.WriteLongHex(0x1, i);
+		Serial.WriteString(0x1, ": ");
+		asm volatile("POP %0"
+		: "=a"(Temp));
+		Serial.WriteLongHex(0x1, Temp);
 	}
+	Serial.WriteString(0x1, "\r\nTime");
+	Serial.WriteLongHex(0x1, TimeSinceStart);
+	Serial.WriteString(0x1, "\r\nKernel panic: ");
+	Serial.WriteString(0x1, Reason);
+	
+	asm("CLI; HLT");
 }
 
 void Kernel_Panic(const char* Reason)
@@ -34,4 +46,8 @@ struct CPUIDdat
 	long MaxLinAddr; //Checks the max linear address width supported
 };
 	
-	
+extern "C" void* memcpy(void* destination, const void* source, long num)
+{
+	for(long i = 0; i < num; i++)
+		((char*)destination)[i] = ((char*)source)[i];
+}

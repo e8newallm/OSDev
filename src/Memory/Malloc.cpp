@@ -6,38 +6,24 @@ void AddVMemory(unsigned long Size)
 {
 	int NewFrameCount = (Size / 0x1000) + 2;
 	int Current = 0;
-	MBlockHeader* PrevEnd = CurrentProcess->EndBlock;
+	MBlockHeader* Start = (CurrentProcess->OwnerProcess)->StartBlock;
+	MBlockHeader* PrevEnd = (CurrentProcess->OwnerProcess)->EndBlock;
 	while(Current < NewFrameCount)
 	{
-		CurrentProcess->EndBlock = (MBlockHeader*)(((long)CurrentProcess->EndBlock) + 0x1000);
-		CurrentProcess->Page.MapAddress((unsigned long)PhysMemory.UseFreePhyAddr(), (unsigned long)CurrentProcess->EndBlock);
+		(CurrentProcess->OwnerProcess)->EndBlock = (MBlockHeader*)(((long)(CurrentProcess->OwnerProcess)->EndBlock) + 0x1000);
+		(CurrentProcess->OwnerProcess)->Page.MapAddress((unsigned long)PhysMemory.UseFreePhyAddr(), (unsigned long)(CurrentProcess->OwnerProcess)->EndBlock);
 		Current++;
 	}
 	if(PrevEnd->PrevUsage == MBlockHeader_Free)
 		PrevEnd = (MBlockHeader*)((long)PrevEnd - PrevEnd->PrevSize - sizeof(MBlockHeader));
-	PrevEnd->NextSize = ((long)CurrentProcess->EndBlock - (long)PrevEnd) - sizeof(MBlockHeader);
+	PrevEnd->NextSize = ((long)(CurrentProcess->OwnerProcess)->EndBlock - (long)PrevEnd) - sizeof(MBlockHeader);
 	PrevEnd->NextUsage = MBlockHeader_Free;
-	(CurrentProcess->EndBlock)->PrevSize = ((long)CurrentProcess->EndBlock - (long)PrevEnd) - sizeof(MBlockHeader);
-	(CurrentProcess->EndBlock)->PrevUsage = MBlockHeader_Free;
-	(CurrentProcess->EndBlock)->NextUsage = MBlockHeader_End;
+	((CurrentProcess->OwnerProcess)->EndBlock)->PrevSize = ((long)(CurrentProcess->OwnerProcess)->EndBlock - (long)PrevEnd) - sizeof(MBlockHeader);
+	((CurrentProcess->OwnerProcess)->EndBlock)->PrevUsage = MBlockHeader_Free;
+	((CurrentProcess->OwnerProcess)->EndBlock)->NextUsage = MBlockHeader_End;
 	
-	MBlockHeader* Check = (MBlockHeader*)CurrentProcess->StartBlock;
+	MBlockHeader* Check = (MBlockHeader*)(CurrentProcess->OwnerProcess)->StartBlock;
 	long Count = 0;
-	/*Serial.WriteString(0x1, "\r\n\r\nMemory Test Results");
-	while(Check->NextUsage != MBlockHeader_End)
-	{
-		Serial.WriteString(0x1, "\r\n\r\nBlock ");
-		Serial.WriteLong(0x1, Count);
-		Serial.WriteString(0x1, "\r\nUsage ");
-		Serial.WriteLongHex(0x1, Check->NextUsage);
-		Serial.WriteString(0x1, "\r\nSize ");
-		Serial.WriteLongHex(0x1, Check->NextSize);
-		Serial.WriteString(0x1, "\r\nAddress ");
-		Serial.WriteLongHex(0x1, (long)Check);
-		Count++;
-		Check = (MBlockHeader*)((long)Check + Check->NextSize + sizeof(MBlockHeader));
-	}
-	Serial.WriteString(0x1, "\r\nEnd of memory"); */
 	
 	return;
 }
@@ -49,7 +35,7 @@ void* Malloc(unsigned long Size)
 		return (void*)0;
 	if(Size > MallocBucketLimit) //If Size is too large to be used in the bucket memories
 	{
-		MBlockHeader* Check = CurrentProcess->StartBlock;
+		MBlockHeader* Check = (CurrentProcess->OwnerProcess)->StartBlock;
 		//Serial.WriteString(0x1, "\r\nTest. PrevUsage: ");
 		//Serial.WriteLongHex(0x1, Check->PrevUsage);
 		while(1)
@@ -86,17 +72,17 @@ void* Malloc(unsigned long Size)
 					return (void*)((long)Check + sizeof(MBlockHeader));
 				}
 			}
-			Serial.WriteString(0x1, "\r\nNext block");
+			//Serial.WriteString(0x1, "\r\nNext block");
 			if(Check->NextUsage == MBlockHeader_End)
 			{
-				Serial.WriteString(0x1, "\r\nAllocation Needed");
+				//Serial.WriteString(0x1, "\r\nAllocation Needed");
 				if(Check->PrevUsage == MBlockHeader_Free)
 					Check = (MBlockHeader*)((long)Check - Check->PrevSize - sizeof(MBlockHeader));
 				AddVMemory(Size);
 			}
 			else
 			{
-				Serial.WriteString(0x1, "\r\nNo allocation Needed");
+				//Serial.WriteString(0x1, "\r\nNo allocation Needed");
 				Check = (MBlockHeader*)((long)Check + Check->NextSize + sizeof(MBlockHeader));
 			}
 		}

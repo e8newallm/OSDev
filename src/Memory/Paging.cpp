@@ -16,6 +16,8 @@
 
 #define ProcessMemStart 0x2000000
 
+unsigned long CurrentSP, CurrentBP, CurrentPage;
+unsigned long CurrentPhyAddr, CurrentVirtAddr;
 void PageTableSetup(long* TableEntries)
 {
 	for(int x = 0; x < 512; x++)
@@ -27,9 +29,9 @@ void PageTableSetup(long* TableEntries)
 class PageFile
 {
 	public:
-	long* Pages = 0x0;
+	long* Pages;
 	
-	
+	PageFile();
 	bool MapAddress(unsigned long, unsigned long);
 	bool RawMapAddress(unsigned long, unsigned long);
 	void Activate();
@@ -38,22 +40,31 @@ class PageFile
 	void CreateTable(unsigned long);
 };
 
-PageFile Paging;
+PageFile::PageFile()
+{
+	Pages = (long*)0x0;
+}
+
+PageFile Paging; //The 1:1 table
 
 void PageFile::CreateTable(unsigned long VirtAddr)
 {
-	unsigned long CurrentPage;
-	asm volatile("MOV %%CR3, %0" : "=r"(CurrentPage));
+	void* TempStackPointer = (TempStack + 0xFFF);
+	CurrentVirtAddr = VirtAddr;
+	asm volatile("MOV %%CR3, %0; MOV %%RSP, %1; MOV %%RBP, %2;" 
+				: "=r"(CurrentPage), "=r"(CurrentSP), "=r"(CurrentBP));
 	Paging.Activate();
+	asm volatile("MOV %0, %%RSP; MOV %0, %%RBP" : : "r"(TempStackPointer));
+	
 	long* NewPML4;
 	long* NewPDPT;
 	long* NewPD;
 	long* NewPT;
 	
-	unsigned char PML4Index = CONVERTFROMPML4(VirtAddr);
-	unsigned short PDPTIndex = CONVERTFROMPDPT(VirtAddr);
-	unsigned short PDIndex = CONVERTFROMPD(VirtAddr);
-	long Address = GETTABLEADDR(VirtAddr);
+	unsigned char PML4Index = CONVERTFROMPML4(CurrentVirtAddr);
+	unsigned short PDPTIndex = CONVERTFROMPDPT(CurrentVirtAddr);
+	unsigned short PDIndex = CONVERTFROMPD(CurrentVirtAddr);
+	long Address = GETTABLEADDR(CurrentVirtAddr);
 	if(Pages == 0x0)
 	{
 		NewPML4 = (long*)PhysMemory.UseFreePhyAddr();
@@ -64,7 +75,7 @@ void PageFile::CreateTable(unsigned long VirtAddr)
 		Pages[PML4Index] = (long)NewPDPT | 0x3;
 		NewPDPT[PDPTIndex] = (long)NewPD | 0x3;
 		NewPD[PDIndex] = (long)NewPT | 0x3;
-		asm volatile("MOV %0, %%CR3" : : "r"(CurrentPage));
+		asm volatile("MOV %0, %%CR3; MOV %1, %%RSP; MOV %2, %%RBP;" : : "r"(CurrentPage), "r"(CurrentSP), "r"(CurrentBP));
 		return;
 	}
 	
@@ -76,29 +87,29 @@ void PageFile::CreateTable(unsigned long VirtAddr)
 		Pages[PML4Index] = (long)NewPDPT | 0x3;
 		NewPDPT[PDPTIndex] = (long)NewPD | 0x3;
 		NewPD[PDIndex] = (long)NewPT | 0x3;
-		asm volatile("MOV %0, %%CR3" : : "r"(CurrentPage));
+		asm volatile("MOV %0, %%CR3; MOV %1, %%RSP; MOV %2, %%RBP;" : : "r"(CurrentPage), "r"(CurrentSP), "r"(CurrentBP));
 		return;
 	}
 	long* PDPTTable = (long*)(GETTABLEADDR(Pages[PML4Index]));
 	if(PDPTTable[PDPTIndex] == (long)0)
-	
 	{
 		NewPD = (long*)PhysMemory.UseFreePhyAddr();
 		NewPT = (long*)PhysMemory.UseFreePhyAddr();
 		PDPTTable[PDPTIndex] = (long)NewPD | 0x3;
 		NewPD[PDIndex] = (long)NewPT | 0x3;
 		NewPD[PDIndex] = (long)NewPT | 0x3;
-		asm volatile("MOV %0, %%CR3" : : "r"(CurrentPage));
+		asm volatile("MOV %0, %%CR3; MOV %1, %%RSP; MOV %2, %%RBP;" : : "r"(CurrentPage), "r"(CurrentSP), "r"(CurrentBP));
+		return;
 	}
 	long* PDTable = (long*)(GETTABLEADDR(PDPTTable[PDPTIndex]));
 	if(PDTable[PDIndex] == (long)0)
 	{
 		NewPT = (long*)PhysMemory.UseFreePhyAddr();
 		PDTable[PDIndex] = (long)NewPT | 0x3;
-		asm volatile("MOV %0, %%CR3" : : "r"(CurrentPage));
+		asm volatile("MOV %0, %%CR3; MOV %1, %%RSP; MOV %2, %%RBP;" : : "r"(CurrentPage), "r"(CurrentSP), "r"(CurrentBP));
 		return;
 	}
-	asm volatile("MOV %0, %%CR3" : : "r"(CurrentPage));
+	asm volatile("MOV %0, %%CR3; MOV %1, %%RSP; MOV %2, %%RBP;" : : "r"(CurrentPage), "r"(CurrentSP), "r"(CurrentBP));
 	return;
 }
 
@@ -123,25 +134,73 @@ bool PageFile::RawMapAddress(unsigned long PhyAddr, unsigned long VirtAddr)
 bool PageFile::MapAddress(unsigned long PhyAddr, unsigned long VirtAddr)
 {
 	CreateTable(VirtAddr);
-	unsigned long CurrentPage;
-	asm volatile("MOV %%CR3, %0" : "=r"(CurrentPage));
+	void* TempStackPointer = (TempStack + 0xFFF);
+	CurrentPhyAddr = PhyAddr;
+	CurrentVirtAddr = VirtAddr;
+	asm volatile("MOV %%CR3, %0; MOV %%RSP, %1; MOV %%RBP, %2;" 
+				: "=r"(CurrentPage), "=r"(CurrentSP), "=r"(CurrentBP));
 	Paging.Activate();
+	asm volatile("MOV %0, %%RSP; MOV %0, %%RBP" : : "r"(TempStackPointer));
 	
-	unsigned long AlignedPhyAddr = GETTABLEADDR(PhyAddr);
-	unsigned char PML4Index = CONVERTFROMPML4(VirtAddr);
-
+	if(Testing)
+	{
+		Serial.WriteString(0x1, "\r\n\r\nPhyAddr: ");
+		Serial.WriteLongHex(0x1, (long)CurrentPhyAddr);
+		Serial.WriteString(0x1, "\r\nVirtAddr: ");
+		Serial.WriteLongHex(0x1, (long)CurrentVirtAddr);
+	}
+	
+	unsigned long AlignedPhyAddr = GETTABLEADDR(CurrentPhyAddr);
+	unsigned char PML4Index = CONVERTFROMPML4(CurrentVirtAddr);
+	
+	if(Testing)
+	{
+		Serial.WriteString(0x1, "\r\nPML4 Index: ");
+		Serial.WriteLongHex(0x1, (long)PML4Index);
+	}
+	
 	long* PDPTTable = (long*)(GETTABLEADDR(Pages[PML4Index]));
-	unsigned short PDPTIndex = CONVERTFROMPDPT(VirtAddr);
+	unsigned short PDPTIndex = CONVERTFROMPDPT(CurrentVirtAddr);
 
+	if(Testing)
+	{
+		Serial.WriteString(0x1, "\r\nPDPTTable: ");
+		Serial.WriteLongHex(0x1, (long)PDPTTable);
+		Serial.WriteString(0x1, "\r\nPDPT Index: ");
+		Serial.WriteLongHex(0x1, (long)PDPTIndex);
+	}
+	
 	long* PDTable = (long*)(GETTABLEADDR(PDPTTable[PDPTIndex]));
-	unsigned short PDIndex = CONVERTFROMPD(VirtAddr);
+	unsigned short PDIndex = CONVERTFROMPD(CurrentVirtAddr);
+	
+	if(Testing)
+	{
+		Serial.WriteString(0x1, "\r\nPDTable: ");
+		Serial.WriteLongHex(0x1, (long)PDTable);
+		Serial.WriteString(0x1, "\r\nPDIndex: ");
+		Serial.WriteLongHex(0x1, (long)PDIndex);
+	}
 	
 	long* PTTable = (long*)(GETTABLEADDR(PDTable[PDIndex]));
-	unsigned short PTIndex = CONVERTFROMPT(VirtAddr);
+	unsigned short PTIndex = CONVERTFROMPT(CurrentVirtAddr);
 
+	if(Testing)
+	{
+		Serial.WriteString(0x1, "\r\nPTTable: ");
+		Serial.WriteLongHex(0x1, (long)PTTable);
+		Serial.WriteString(0x1, "\r\nPTIndex: ");
+		Serial.WriteLongHex(0x1, (long)PTIndex);
+	}
+	
 	PTTable[PTIndex] = (long)AlignedPhyAddr | 0x83;
+	
+	if(Testing)
+	{
+		Serial.WriteString(0x1, "\r\nPTTable[PTIndex]: ");
+		Serial.WriteLongHex(0x1, (long)PTTable[PTIndex]);
+	}
 	__asm__("invlpg (%0)" : : "r"((void*)PDTable));
-	asm volatile("MOV %0, %%CR3" : : "r"(CurrentPage));
+	asm volatile("MOV %0, %%CR3; MOV %1, %%RSP; MOV %2, %%RBP;" : : "r"(CurrentPage), "r"(CurrentSP), "r"(CurrentBP));
 	return true;
 }
 

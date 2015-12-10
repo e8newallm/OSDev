@@ -1,7 +1,7 @@
 all:
 	clear
 	clear
-	/dat/OSDev/Cross-Compiler/bin/x86_64-elf-gcc -o /dat/OSDev/tmp/Kernel.o -c /dat/OSDev/src/Kernel.cpp -ffreestanding --no-exceptions -fpermissive -std=c++11 -m64 -mno-red-zone -O2
+	/dat/OSDev/Cross-Compiler/bin/x86_64-elf-g++ -o /dat/OSDev/tmp/Kernel.o -c /dat/OSDev/src/Kernel.cpp -ffreestanding --no-exceptions -fpermissive -std=c++11 -m64 -mno-red-zone -O2
 	/dat/OSDev/Cross-Compiler/bin/x86_64-elf-as -o /dat/OSDev/tmp/Stage2.o -c /dat/OSDev/src/Stage2.s
 	/dat/OSDev/Cross-Compiler/bin/x86_64-elf-as -o /dat/OSDev/tmp/Interrupts.o -c /dat/OSDev/src/Interrupts/Interrupts.s
 	/dat/OSDev/Cross-Compiler/bin/x86_64-elf-as -o /dat/OSDev/tmp/ProcessSwitch.o -c /dat/OSDev/src/ProcessSwitch.s

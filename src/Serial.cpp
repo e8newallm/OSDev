@@ -62,6 +62,7 @@ short SerialController::GetPort(int Port)
 
 bool SerialController::WriteChar(short COMPort, char Character)
 {
+	//return true;
 	short Port = GetPort(COMPort);
 	while(PortAvail(Port) == 0);
 	

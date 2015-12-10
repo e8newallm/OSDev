@@ -5,6 +5,16 @@
 
 #define PIC_EOI 0x20
 
+inline void PushAll()
+{
+	asm("PUSH %RAX; PUSH %RCX; PUSH %RBP; PUSH %RBX; PUSH %RSI; PUSH %RDI; PUSH %RBP; PUSH %R8; PUSH %R9; PUSH %R10; PUSH %R11; PUSH %R12; PUSH %R13; PUSH %R14; PUSH %R15; PUSHF");
+}
+
+inline void PopAll()
+{
+	asm("POPF; POP %R15; POP %R14; POP %R13; POP %R12; POP %R11; POP %R10; POP %R9; POP %R8; POP %RBP; POP %RDI; POP %RSI; POP %RBX; POP %RBP; POP %RCX; POP %RAX");
+}
+
 struct __attribute__ ((packed)) IDTDescr
 {
    short Offset1;
@@ -83,6 +93,8 @@ void PICMapping_Init(char PICMOff, char PICSOff)
 
 extern "C" void KeyboardInterrupt()
 {
+	CLI();
+	PushAll();
 	char PressedKey = Input8(0x60);
 	bool Test;
 	if(PressedKey < 0x58)
@@ -91,19 +103,27 @@ extern "C" void KeyboardInterrupt()
 	}
 	if(!Test)
 	{
-		Kernel_Panic("\r\nQueue's full yo!");
+		Kernel_Panic("\r\nKeypress queue full!");
 	}
 	PICEndInt((char)1);
+	PopAll();
+	STI();
 }
 
 extern "C" void SystemTimerInterrupt()
 {
-	//Serial.WriteString(0x1, "\r\nSystem Timer Interrupt start");
-	TimeSinceStart += 50;
-	CurrentProcess->Duration += 50;
+	CLI();
+	PushAll();
+	TimeSinceStart += 5;
+	CurrentProcess->Duration += 5;
 	PICEndInt((char)0);
 	if(CurrentProcess->Duration >= CurrentProcess->MaxDuration)
 	{
-		SwitchProcesses();
+		//Serial.WriteString(0x1, "Switching\r\n");
+		//SwitchProcesses();
 	}
+	Output8(0x40, 0x4E); //Set lower byte 0x4E
+	Output8(0x40, 0x17); //set higher byte 0x17
+	PopAll();
+	STI();
 }
