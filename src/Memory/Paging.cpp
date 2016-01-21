@@ -38,6 +38,7 @@ class PageFile
 	unsigned long GetFreeAddress();
 	void SetupStartMemory();
 	void CreateTable(unsigned long);
+	unsigned long FreeAll();
 };
 
 PageFile::PageFile()
@@ -72,9 +73,9 @@ void PageFile::CreateTable(unsigned long VirtAddr)
 		NewPD = (long*)PhysMemory.UseFreePhyAddr();
 		NewPT = (long*)PhysMemory.UseFreePhyAddr();
 		Pages = (long*)NewPML4;
-		Pages[PML4Index] = (long)NewPDPT | 0x3;
-		NewPDPT[PDPTIndex] = (long)NewPD | 0x3;
-		NewPD[PDIndex] = (long)NewPT | 0x3;
+		Pages[PML4Index] = (long)NewPDPT | 0x7;
+		NewPDPT[PDPTIndex] = (long)NewPD | 0x7;
+		NewPD[PDIndex] = (long)NewPT | 0x7;
 		asm volatile("MOV %0, %%CR3; MOV %1, %%RSP; MOV %2, %%RBP;" : : "r"(CurrentPage), "r"(CurrentSP), "r"(CurrentBP));
 		return;
 	}
@@ -84,9 +85,9 @@ void PageFile::CreateTable(unsigned long VirtAddr)
 		NewPDPT = (long*)PhysMemory.UseFreePhyAddr();
 		NewPD = (long*)PhysMemory.UseFreePhyAddr();
 		NewPT = (long*)PhysMemory.UseFreePhyAddr();
-		Pages[PML4Index] = (long)NewPDPT | 0x3;
-		NewPDPT[PDPTIndex] = (long)NewPD | 0x3;
-		NewPD[PDIndex] = (long)NewPT | 0x3;
+		Pages[PML4Index] = (long)NewPDPT | 0x7;
+		NewPDPT[PDPTIndex] = (long)NewPD | 0x7;
+		NewPD[PDIndex] = (long)NewPT | 0x7;
 		asm volatile("MOV %0, %%CR3; MOV %1, %%RSP; MOV %2, %%RBP;" : : "r"(CurrentPage), "r"(CurrentSP), "r"(CurrentBP));
 		return;
 	}
@@ -95,9 +96,9 @@ void PageFile::CreateTable(unsigned long VirtAddr)
 	{
 		NewPD = (long*)PhysMemory.UseFreePhyAddr();
 		NewPT = (long*)PhysMemory.UseFreePhyAddr();
-		PDPTTable[PDPTIndex] = (long)NewPD | 0x3;
-		NewPD[PDIndex] = (long)NewPT | 0x3;
-		NewPD[PDIndex] = (long)NewPT | 0x3;
+		PDPTTable[PDPTIndex] = (long)NewPD | 0x7;
+		NewPD[PDIndex] = (long)NewPT | 0x7;
+		NewPD[PDIndex] = (long)NewPT | 0x7;
 		asm volatile("MOV %0, %%CR3; MOV %1, %%RSP; MOV %2, %%RBP;" : : "r"(CurrentPage), "r"(CurrentSP), "r"(CurrentBP));
 		return;
 	}
@@ -105,7 +106,7 @@ void PageFile::CreateTable(unsigned long VirtAddr)
 	if(PDTable[PDIndex] == (long)0)
 	{
 		NewPT = (long*)PhysMemory.UseFreePhyAddr();
-		PDTable[PDIndex] = (long)NewPT | 0x3;
+		PDTable[PDIndex] = (long)NewPT | 0x7;
 		asm volatile("MOV %0, %%CR3; MOV %1, %%RSP; MOV %2, %%RBP;" : : "r"(CurrentPage), "r"(CurrentSP), "r"(CurrentBP));
 		return;
 	}
@@ -126,7 +127,7 @@ bool PageFile::RawMapAddress(unsigned long PhyAddr, unsigned long VirtAddr)
 	
 	long* PETable = (long*)(GETTABLEADDR(PDTable[PDIndex]));
 	unsigned short PTIndex = CONVERTFROMPT(VirtAddr);
-	PETable[PTIndex] = (long)AlignedPhyAddr | 0x83;
+	PETable[PTIndex] = (long)AlignedPhyAddr | 0x7;
 	__asm__("invlpg (%0)" : : "r"((void*)PDTable));
 	return true;
 }
@@ -139,6 +140,8 @@ bool PageFile::MapAddress(unsigned long PhyAddr, unsigned long VirtAddr)
 	CurrentVirtAddr = VirtAddr;
 	asm volatile("MOV %%CR3, %0; MOV %%RSP, %1; MOV %%RBP, %2;" 
 				: "=r"(CurrentPage), "=r"(CurrentSP), "=r"(CurrentBP));
+	//if(!PhysMemory.UsePhyAddr(PhysMemory[PhysMemory.AddrToPos((void*)PhyAddr)]))
+		//return false;
 	Paging.Activate();
 	asm volatile("MOV %0, %%RSP; MOV %0, %%RBP" : : "r"(TempStackPointer));
 	
@@ -192,7 +195,7 @@ bool PageFile::MapAddress(unsigned long PhyAddr, unsigned long VirtAddr)
 		Serial.WriteLongHex(0x1, (long)PTIndex);
 	}
 	
-	PTTable[PTIndex] = (long)AlignedPhyAddr | 0x83;
+	PTTable[PTIndex] = (long)AlignedPhyAddr | 0x7;
 	
 	if(Testing)
 	{
@@ -241,6 +244,41 @@ unsigned long PageFile::GetFreeAddress()
 	return (long)0;
 }
 
+unsigned long PageFile::FreeAll()
+{
+	for(long PML4Index = 0; PML4Index < 512; PML4Index++)
+	{
+		if(Pages[PML4Index] != (long)0)
+		{
+			long* PDPTTable = (long*)(GETTABLEADDR(Pages[PML4Index]));
+			for(long PDPTIndex = 0; PDPTIndex < 512; PDPTIndex++)
+			{
+				if(PDPTTable[PDPTIndex] != (long)0)
+				{
+					long* PDTable = (long*)(GETTABLEADDR(PDPTTable[PDPTIndex]));
+					for(long PDIndex = 0; PDIndex < 512; PDIndex++)
+					{
+						if(PDTable[PDIndex] != (long)0)
+						{
+							long* PETable = (long*)(GETTABLEADDR(PDTable[PDIndex]));
+							for(long PTIndex = 0; PTIndex < 512; PTIndex++)
+							{
+								if(PETable[PTIndex] != (long)0)
+								{
+									PETable[PTIndex] = 0x0;
+									//PhysMemory.FreePhyAddr(PhysMemory[PhysMemory.AddrToPos((void*)(CONVERTTOPML4(PML4Index) + CONVERTTOPDPT(PDPTIndex)
+									//					+ CONVERTTOPD(PDIndex) + CONVERTTOPT(PTIndex)))]);
+								}
+							}
+						}
+					}
+				}			
+			}
+		}
+	}
+	return (long)0;
+}
+
 void PageFile::SetupStartMemory()
 {
 	for(unsigned long i = 0; i < ProcessMemStart; i += 0x1000)
@@ -251,42 +289,42 @@ void PageFile::SetupStartMemory()
 
 long PD[] __attribute__((section (".PD")))
 {
-(long)0x83,
-(long)0x200083,
-(long)0x400083,
-(long)0x600083,
-(long)0x800083,
-(long)0xA00083,
-(long)0xC00083,
-(long)0xE00083,
-(long)0x1000083,
-(long)0x1200083,
-(long)0x1400083,
-(long)0x1600083,
-(long)0x1800083,
-(long)0x1A00083,
-(long)0x1C00083,
-(long)0x1E00083,
-(long)0x2000083,
-(long)0x2200083,
-(long)0x2400083,
-(long)0x2600083,
-(long)0x2800083,
-(long)0x2A00083,
-(long)0x2C00083,
-(long)0x2E00083,
-(long)0x3000083,
-(long)0x3200083,
-(long)0x3400083,
-(long)0x3600083,
-(long)0x3800083,
-(long)0x3A00083,
+(long)0x87,
+(long)0x200087,
+(long)0x400087,
+(long)0x600087,
+(long)0x800087,
+(long)0xA00087,
+(long)0xC00087,
+(long)0xE00087,
+(long)0x1000087,
+(long)0x1200087,
+(long)0x1400087,
+(long)0x1600087,
+(long)0x1800087,
+(long)0x1A00087,
+(long)0x1C00087,
+(long)0x1E00087,
+(long)0x2000087,
+(long)0x2200087,
+(long)0x2400087,
+(long)0x2600087,
+(long)0x2800087,
+(long)0x2A00087,
+(long)0x2C00087,
+(long)0x2E00087,
+(long)0x3000087,
+(long)0x3200087,
+(long)0x3400087,
+(long)0x3600087,
+(long)0x3800087,
+(long)0x3A00087,
 };
 long PDPT[] __attribute__((section (".PDPT")))
 {
-(long)&PD + (long)0x03
+(long)&PD + (long)0x07
 };
 long PML4[] __attribute__((section (".PML4"))) =
 {
-(long)&PDPT + (long)0x3
+(long)&PDPT + (long)0x7
 };

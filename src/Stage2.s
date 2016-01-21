@@ -1,12 +1,21 @@
 .code32
 
 .global BootStart
+.global GDTData
+.global GDTTSS
 
 .data
 	GDT:
-    .quad 0x0000000000000000             #Null Descriptor - should be present.
-    .quad 0x0020980000000000             #64-bit code descriptor. 
-    .quad 0x0000920000000000             #64-bit data descriptor. 
+    .quad 0b0            #Null Descriptor - should be present.
+    .quad 0b00100000100110000000000000000000000000000000000000000000 	#64-bit code descriptor. (RING 0)
+    .quad 0b00000000100100100000000000000000000000000000000000000000 	#64-bit data descriptor. (RING 0)
+
+	.quad 0b00100000111110000000000000000000000000000000000000000000	#64-bit code descriptor. (RING 3)
+	GDTData:
+    .quad 0b00000000111100100000000000000000000000000000000000000000	#64-bit data descriptor. (RING 3)
+	GDTTSS:
+	.quad 0b0
+	.quad 0b0	#64-bit TSS entry
 	GDTPointer:
     .word . - GDT - 1                    #16-bit Size (Limit) of GDT.
 	.quad GDT
@@ -50,8 +59,13 @@ BootStart:
 	MOVL StackBase, %EBP
 	MOVL StackBase, %ESP
 
-	
 	LGDT (GDTPointer)
+	MOV $0x10, %AX
+	MOV %AX, %DS
+	MOV %AX, %SS
+	MOV %AX, %ES
+	MOV %AX, %FS
+	MOV %AX, %GS
 	LJMP $0x0008, $Kernel_Start
 	
 	#Go back to real mode

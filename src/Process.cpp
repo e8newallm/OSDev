@@ -36,8 +36,8 @@ class Thread
 	const char* ProcessName;
 	Thread* NextProcess;
 	bool Killed;
-	Thread(void*, long, Process*, PageFile*, int);
-	Thread(void*, long, Process*, int);
+	Thread(void*, long, Process*, PageFile*, long);
+	Thread(void*, long, Process*, long);
 	Thread();
 	void Start();
 	void Kill();
@@ -46,6 +46,7 @@ class Thread
 class Process
 {
 public:
+	bool Available;
 	long* RSP;
 	long Duration, MaxDuration;
 	PageFile Page;
@@ -66,11 +67,33 @@ public:
 };
 
 Thread* CurrentProcess;
+Process ProcessList[255];
+
+int CreateProcess(void* Main, long Duration, const char* Name)
+{
+	CLI();
+	for(long i = 0; i < 255; i++)
+	{
+		if(ProcessList[i].Available)
+		{
+			ProcessList[i] = Process(Main, Duration, Name, (ProcessList+i));
+			STI();
+			return i;
+		}
+	}
+	Kernel_Panic("OH SHIT NO PROCESSES LEFT");
+}
+
+Process GetProcess(int ID)
+{
+	return ProcessList[ID];
+}
 
 /////////////////////////PROCESS CODE///////////////////////////////////////
 
 Process::Process(void* Main, long DurationMax, const char* Name, Process* VariablePlace)
 {
+	Available = false;
 	ProcessName = Name;
 	Duration = 0;
 	MaxDuration = DurationMax;
@@ -101,12 +124,12 @@ Process::Process(void* Main, long DurationMax, const char* Name, Process* Variab
 
 Process::Process()
 {
+	Available = true;
 }
 
 void SwitchProcesses()
 {
 	CLI();
-
 	asm("PUSH %RAX; PUSH %RCX; PUSH %RBP; PUSH %RBX; PUSH %RDX; PUSH %RSI; PUSH %RDI; PUSH %R8; PUSH %R9; PUSH %R10; PUSH %R11; PUSH %R12; PUSH %R13; PUSH %R14; PUSH %R15; PUSHF");
 	if(Multitasking)
 	{
@@ -114,6 +137,7 @@ void SwitchProcesses()
 		Thread* Next = CurrentProcess->NextProcess;
 		while(Next->Killed)
 		{
+			Next->Available = true;
 			Next = Next->NextProcess;
 			CurrentProcess->NextProcess = Next;
 		}
@@ -162,13 +186,15 @@ void Process::Start()
 void Process::StartThread(int ThreadID)
 {
 	Serial.WriteString(0x1, "\r\nStarting Thread ID ");
-	Serial.WriteLongHex(0x1, (long)ThreadID);
+	Serial.WriteLongHex(0x1, ThreadID);
 	ThreadList[ThreadID].Start();
 }
 
 void Process::Kill()
 {
 	Killed = true;
+	Available = true;
+	Page.FreeAll();
 	//TODO: Add freeing of memory and closing of process if the current active one
 }
 
@@ -176,7 +202,7 @@ void Process::Kill()
 
 int Process::CreateThread(void* Main, long Duration)
 {
-	for(int i = 0; i < 255; i++)
+	for(long i = 0; i < 255; i++)
 	{
 		if(ThreadList[i].Available)
 		{
@@ -189,14 +215,14 @@ int Process::CreateThread(void* Main, long Duration)
 
 unsigned long ThreadMain, ThreadBP;
 
-Thread::Thread(void* Main, long DurationMax, Process* OwnerProcessIn, PageFile* PageIn, int IDThread)
+Thread::Thread(void* Main, long DurationMax, Process* OwnerProcessIn, PageFile* PageIn, long IDThread)
 {
 	Available = false;
 	ThreadID = IDThread;
 	asm volatile("MOV %%CR3, %0" : "=r"(CurrentPage));
 	OwnerProcess = OwnerProcessIn;
 	Page = PageIn;
-	char* Stack = ThreadStackStart + (IDThread * 0x1000);
+	char* Stack = (char*)(ThreadStackStart + (IDThread * 0x1000));
 	Page->MapAddress((unsigned long)PhysMemory.UseFreePhyAddr(), (unsigned long)(Stack));
 	RSP = (long*)(Stack + (0x1000 - (8 * 18))); //Add starting values to stack for ProcessSwitch to switch in
 	ThreadBP = (long)(Stack + 0xFFF);
@@ -211,14 +237,14 @@ Thread::Thread(void* Main, long DurationMax, Process* OwnerProcessIn, PageFile* 
 	Killed = false;
 }
 
-Thread::Thread(void* Main, long DurationMax, Process* OwnerProcessIn, int IDThread)
+Thread::Thread(void* Main, long DurationMax, Process* OwnerProcessIn, long IDThread)
 {
 	Available = false;
 	ThreadID = IDThread;
 	asm volatile("MOV %%CR3, %0" : "=r"(CurrentPage));
 	OwnerProcess = OwnerProcessIn;
 	Page = &(OwnerProcess->Page);
-	char* Stack = ThreadStackStart + (IDThread * 0x1000);
+	char* Stack = (char*)(ThreadStackStart + (IDThread * 0x1000));
 	Page->MapAddress((unsigned long)PhysMemory.UseFreePhyAddr(), (unsigned long)(Stack));
 	RSP = (long*)(Stack + (0x1000 - (8 * 18))); //Add starting values to stack for ProcessSwitch to switch in
 	ThreadBP = (long)(Stack + 0xFFF);
@@ -249,7 +275,6 @@ Thread::Thread()
 void Thread::Kill()
 {
 	Killed = true;
-	Available = true;
 	//TODO: Add freeing of memory and closing of process if the current active one
 }
 
@@ -264,3 +289,5 @@ void ReturnThread()
 	STI();
 	SwitchProcesses();
 }
+
+//MUTEX CODE FOR GCC __sync_lock_test_and_set (type *ptr, type value, ...)
