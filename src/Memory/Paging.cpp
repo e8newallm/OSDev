@@ -1,14 +1,14 @@
 ///PML4 -> PDPT -> PD -> PT
 
-#define CONVERTTOPML4(x) x << 39
-#define CONVERTTOPDPT(x) x << 30
-#define CONVERTTOPD(x) x << 21
-#define CONVERTTOPT(x) x << 12
+#define CONVERTTOPML4(x) (x << 39)
+#define CONVERTTOPDPT(x) (x << 30)
+#define CONVERTTOPD(x) (x << 21)
+#define CONVERTTOPT(x) (x << 12)
 
-#define CONVERTFROMPML4(x) (x >> 39) & 0x1FF
-#define CONVERTFROMPDPT(x) (x >> 30) & 0x1FF
-#define CONVERTFROMPD(x) (x >> 21) & 0x1FF
-#define CONVERTFROMPT(x) (x >> 12) & 0x1FF
+#define CONVERTFROMPML4(x) ((x >> 39) & 0x1FF)
+#define CONVERTFROMPDPT(x) ((x >> 30) & 0x1FF)
+#define CONVERTFROMPD(x) ((x >> 21) & 0x1FF)
+#define CONVERTFROMPT(x) ((x >> 12) & 0x1FF)
 
 #define TABLEADDRMASK 0x7FFFFFFFFF000
 
@@ -16,8 +16,9 @@
 
 #define ProcessMemStart 0x2000000
 
-unsigned long CurrentSP, CurrentBP, CurrentPage;
-unsigned long CurrentPhyAddr, CurrentVirtAddr;
+#define PhysicalTable 0xFFFF800000000000
+#define PhysicalAccess(x) ((long*)(PhysicalTable + (long)x))
+
 void PageTableSetup(long* TableEntries)
 {
 	for(int x = 0; x < 512; x++)
@@ -43,205 +44,62 @@ class PageFile
 
 PageFile::PageFile()
 {
-	Pages = (long*)0x0;
+	Pages = (long*)PhysMemory.UseFreePhyAddr();
 }
 
-PageFile Paging; //The 1:1 table
+PageFile ModelPaging; //The initial paging setup
 
 void PageFile::CreateTable(unsigned long VirtAddr)
 {
-	void* TempStackPointer = (TempStack + 0xFFF);
-	CurrentVirtAddr = VirtAddr;
-	asm volatile("MOV %%CR3, %0; MOV %%RSP, %1; MOV %%RBP, %2;" 
-				: "=r"(CurrentPage), "=r"(CurrentSP), "=r"(CurrentBP));
-	Paging.Activate();
-	asm volatile("MOV %0, %%RSP; MOV %0, %%RBP" : : "r"(TempStackPointer));
-	
 	long* NewPML4;
 	long* NewPDPT;
 	long* NewPD;
 	long* NewPT;
 	
-	unsigned char PML4Index = CONVERTFROMPML4(CurrentVirtAddr);
-	unsigned short PDPTIndex = CONVERTFROMPDPT(CurrentVirtAddr);
-	unsigned short PDIndex = CONVERTFROMPD(CurrentVirtAddr);
-	long Address = GETTABLEADDR(CurrentVirtAddr);
-	if(Pages == 0x0)
+	unsigned short PML4Index = CONVERTFROMPML4(VirtAddr);
+	unsigned short PDPTIndex = CONVERTFROMPDPT(VirtAddr);
+	unsigned short PDIndex = CONVERTFROMPD(VirtAddr);
+	long Address = GETTABLEADDR(VirtAddr);
+	/*if(Pages == 0x0)
 	{
 		NewPML4 = (long*)PhysMemory.UseFreePhyAddr();
 		NewPDPT = (long*)PhysMemory.UseFreePhyAddr();
 		NewPD = (long*)PhysMemory.UseFreePhyAddr();
 		NewPT = (long*)PhysMemory.UseFreePhyAddr();
 		Pages = (long*)NewPML4;
-		Pages[PML4Index] = (long)NewPDPT | 0x7;
-		NewPDPT[PDPTIndex] = (long)NewPD | 0x7;
-		NewPD[PDIndex] = (long)NewPT | 0x7;
-		asm volatile("MOV %0, %%CR3; MOV %1, %%RSP; MOV %2, %%RBP;" : : "r"(CurrentPage), "r"(CurrentSP), "r"(CurrentBP));
+		PhysicalAccess(Pages)[PML4Index] = (long)NewPDPT | 0x7;
+		PhysicalAccess(NewPDPT)[PDPTIndex] = (long)NewPD | 0x7;
+		PhysicalAccess(NewPD)[PDIndex] = (long)NewPT | 0x7;
 		return;
-	}
+	}*/
 	
-	if(Pages[PML4Index] == (long)0)
+	if(PhysicalAccess(Pages)[PML4Index] == (long)0)
 	{
 		NewPDPT = (long*)PhysMemory.UseFreePhyAddr();
 		NewPD = (long*)PhysMemory.UseFreePhyAddr();
 		NewPT = (long*)PhysMemory.UseFreePhyAddr();
-		Pages[PML4Index] = (long)NewPDPT | 0x7;
-		NewPDPT[PDPTIndex] = (long)NewPD | 0x7;
-		NewPD[PDIndex] = (long)NewPT | 0x7;
-		asm volatile("MOV %0, %%CR3; MOV %1, %%RSP; MOV %2, %%RBP;" : : "r"(CurrentPage), "r"(CurrentSP), "r"(CurrentBP));
+		PhysicalAccess(Pages)[PML4Index] = (long)NewPDPT | 0x7;
+		PhysicalAccess(NewPDPT)[PDPTIndex] = (long)NewPD | 0x7;
+		PhysicalAccess(NewPD)[PDIndex] = (long)NewPT | 0x7;
 		return;
 	}
-	long* PDPTTable = (long*)(GETTABLEADDR(Pages[PML4Index]));
-	if(PDPTTable[PDPTIndex] == (long)0)
+	long* PDPTTable = (long*)(GETTABLEADDR(PhysicalAccess(Pages)[PML4Index]));
+	if(PhysicalAccess(PDPTTable)[PDPTIndex] == (long)0)
 	{
 		NewPD = (long*)PhysMemory.UseFreePhyAddr();
 		NewPT = (long*)PhysMemory.UseFreePhyAddr();
-		PDPTTable[PDPTIndex] = (long)NewPD | 0x7;
-		NewPD[PDIndex] = (long)NewPT | 0x7;
-		NewPD[PDIndex] = (long)NewPT | 0x7;
-		asm volatile("MOV %0, %%CR3; MOV %1, %%RSP; MOV %2, %%RBP;" : : "r"(CurrentPage), "r"(CurrentSP), "r"(CurrentBP));
+		PhysicalAccess(PDPTTable)[PDPTIndex] = (long)NewPD | 0x7;
+		PhysicalAccess(NewPD)[PDIndex] = (long)NewPT | 0x7;
 		return;
 	}
-	long* PDTable = (long*)(GETTABLEADDR(PDPTTable[PDPTIndex]));
-	if(PDTable[PDIndex] == (long)0)
+	long* PDTable = (long*)(GETTABLEADDR(PhysicalAccess(PDPTTable)[PDPTIndex]));
+	if(PhysicalAccess(PDTable)[PDIndex] == (long)0)
 	{
 		NewPT = (long*)PhysMemory.UseFreePhyAddr();
-		PDTable[PDIndex] = (long)NewPT | 0x7;
-		asm volatile("MOV %0, %%CR3; MOV %1, %%RSP; MOV %2, %%RBP;" : : "r"(CurrentPage), "r"(CurrentSP), "r"(CurrentBP));
+		PhysicalAccess(PDTable)[PDIndex] = (long)NewPT | 0x7;
 		return;
 	}
-	asm volatile("MOV %0, %%CR3; MOV %1, %%RSP; MOV %2, %%RBP;" : : "r"(CurrentPage), "r"(CurrentSP), "r"(CurrentBP));
 	return;
-}
-
-bool PageFile::RawMapAddress(unsigned long PhyAddr, unsigned long VirtAddr)
-{
-	unsigned long AlignedPhyAddr = GETTABLEADDR(PhyAddr);
-	unsigned char PML4Index = CONVERTFROMPML4(VirtAddr);
-	
-	long* PDPTTable = (long*)(GETTABLEADDR(Pages[PML4Index]));
-	unsigned short PDPTIndex = CONVERTFROMPDPT(VirtAddr);
-
-	long* PDTable = (long*)(GETTABLEADDR(PDPTTable[PDPTIndex]));
-	unsigned short PDIndex = CONVERTFROMPD(VirtAddr);
-	
-	long* PETable = (long*)(GETTABLEADDR(PDTable[PDIndex]));
-	unsigned short PTIndex = CONVERTFROMPT(VirtAddr);
-	PETable[PTIndex] = (long)AlignedPhyAddr | 0x7;
-	__asm__("invlpg (%0)" : : "r"((void*)PDTable));
-	return true;
-}
-
-bool PageFile::MapAddress(unsigned long PhyAddr, unsigned long VirtAddr)
-{
-	CreateTable(VirtAddr);
-	void* TempStackPointer = (TempStack + 0xFFF);
-	CurrentPhyAddr = PhyAddr;
-	CurrentVirtAddr = VirtAddr;
-	asm volatile("MOV %%CR3, %0; MOV %%RSP, %1; MOV %%RBP, %2;" 
-				: "=r"(CurrentPage), "=r"(CurrentSP), "=r"(CurrentBP));
-	//if(!PhysMemory.UsePhyAddr(PhysMemory[PhysMemory.AddrToPos((void*)PhyAddr)]))
-		//return false;
-	Paging.Activate();
-	asm volatile("MOV %0, %%RSP; MOV %0, %%RBP" : : "r"(TempStackPointer));
-	
-	if(Testing)
-	{
-		Serial.WriteString(0x1, "\r\n\r\nPhyAddr: ");
-		Serial.WriteLongHex(0x1, (long)CurrentPhyAddr);
-		Serial.WriteString(0x1, "\r\nVirtAddr: ");
-		Serial.WriteLongHex(0x1, (long)CurrentVirtAddr);
-	}
-	
-	unsigned long AlignedPhyAddr = GETTABLEADDR(CurrentPhyAddr);
-	unsigned char PML4Index = CONVERTFROMPML4(CurrentVirtAddr);
-	
-	if(Testing)
-	{
-		Serial.WriteString(0x1, "\r\nPML4 Index: ");
-		Serial.WriteLongHex(0x1, (long)PML4Index);
-	}
-	
-	long* PDPTTable = (long*)(GETTABLEADDR(Pages[PML4Index]));
-	unsigned short PDPTIndex = CONVERTFROMPDPT(CurrentVirtAddr);
-
-	if(Testing)
-	{
-		Serial.WriteString(0x1, "\r\nPDPTTable: ");
-		Serial.WriteLongHex(0x1, (long)PDPTTable);
-		Serial.WriteString(0x1, "\r\nPDPT Index: ");
-		Serial.WriteLongHex(0x1, (long)PDPTIndex);
-	}
-	
-	long* PDTable = (long*)(GETTABLEADDR(PDPTTable[PDPTIndex]));
-	unsigned short PDIndex = CONVERTFROMPD(CurrentVirtAddr);
-	
-	if(Testing)
-	{
-		Serial.WriteString(0x1, "\r\nPDTable: ");
-		Serial.WriteLongHex(0x1, (long)PDTable);
-		Serial.WriteString(0x1, "\r\nPDIndex: ");
-		Serial.WriteLongHex(0x1, (long)PDIndex);
-	}
-	
-	long* PTTable = (long*)(GETTABLEADDR(PDTable[PDIndex]));
-	unsigned short PTIndex = CONVERTFROMPT(CurrentVirtAddr);
-
-	if(Testing)
-	{
-		Serial.WriteString(0x1, "\r\nPTTable: ");
-		Serial.WriteLongHex(0x1, (long)PTTable);
-		Serial.WriteString(0x1, "\r\nPTIndex: ");
-		Serial.WriteLongHex(0x1, (long)PTIndex);
-	}
-	
-	PTTable[PTIndex] = (long)AlignedPhyAddr | 0x7;
-	
-	if(Testing)
-	{
-		Serial.WriteString(0x1, "\r\nPTTable[PTIndex]: ");
-		Serial.WriteLongHex(0x1, (long)PTTable[PTIndex]);
-	}
-	__asm__("invlpg (%0)" : : "r"((void*)PDTable));
-	asm volatile("MOV %0, %%CR3; MOV %1, %%RSP; MOV %2, %%RBP;" : : "r"(CurrentPage), "r"(CurrentSP), "r"(CurrentBP));
-	return true;
-}
-
-void PageFile::Activate()
-{
-	asm volatile("MOV %0, %%CR3"
-			: : "a"(Pages));
-}
-
-unsigned long PageFile::GetFreeAddress()
-{
-	for(long PML4Index = 0; PML4Index < 512; PML4Index++)
-	{
-		if(Pages[PML4Index] == (long)0)
-			return CONVERTTOPML4(PML4Index);
-		long* PDPTTable = (long*)(GETTABLEADDR(Pages[PML4Index]));
-		
-		for(long PDPTIndex = 0; PDPTIndex < 512; PDPTIndex++)
-		{
-			if(PDPTTable[PDPTIndex] == (long)0)
-				return CONVERTTOPML4(PML4Index) + CONVERTTOPDPT(PDPTIndex);
-			long* PDTable = (long*)(GETTABLEADDR(PDPTTable[PDPTIndex]));
-				
-			for(long PDIndex = 0; PDIndex < 512; PDIndex++)
-			{
-				if(PDTable[PDIndex] == (long)0)
-					return CONVERTTOPML4(PML4Index) + CONVERTTOPDPT(PDPTIndex) + CONVERTTOPD(PDIndex);
-				long* PETable = (long*)(GETTABLEADDR(PDTable[PDIndex]));
-				
-				for(long PTIndex = 0; PTIndex < 512; PTIndex++)
-				{
-					if(PETable[PTIndex] == 0x00)
-						return (CONVERTTOPML4(PML4Index) + CONVERTTOPDPT(PDPTIndex) + CONVERTTOPD(PDIndex) + CONVERTTOPT(PTIndex));
-				}
-			}			
-		}
-	}
-	return (long)0;
 }
 
 unsigned long PageFile::FreeAll()
@@ -253,19 +111,19 @@ unsigned long PageFile::FreeAll()
 			long* PDPTTable = (long*)(GETTABLEADDR(Pages[PML4Index]));
 			for(long PDPTIndex = 0; PDPTIndex < 512; PDPTIndex++)
 			{
-				if(PDPTTable[PDPTIndex] != (long)0)
+				if(PhysicalAccess(PDPTTable)[PDPTIndex] != (long)0)
 				{
 					long* PDTable = (long*)(GETTABLEADDR(PDPTTable[PDPTIndex]));
 					for(long PDIndex = 0; PDIndex < 512; PDIndex++)
 					{
-						if(PDTable[PDIndex] != (long)0)
+						if(PhysicalAccess(PDTable)[PDIndex] != (long)0)
 						{
 							long* PETable = (long*)(GETTABLEADDR(PDTable[PDIndex]));
 							for(long PTIndex = 0; PTIndex < 512; PTIndex++)
 							{
-								if(PETable[PTIndex] != (long)0)
+								if(PhysicalAccess(PETable)[PTIndex] != (long)0)
 								{
-									PETable[PTIndex] = 0x0;
+									PhysicalAccess(PETable)[PTIndex] = 0x0;
 									//PhysMemory.FreePhyAddr(PhysMemory[PhysMemory.AddrToPos((void*)(CONVERTTOPML4(PML4Index) + CONVERTTOPDPT(PDPTIndex)
 									//					+ CONVERTTOPD(PDIndex) + CONVERTTOPT(PTIndex)))]);
 								}
@@ -279,8 +137,36 @@ unsigned long PageFile::FreeAll()
 	return (long)0;
 }
 
+bool PageFile::MapAddress(unsigned long PhyAddr, unsigned long VirtAddr)
+{
+	CreateTable(VirtAddr);
+	unsigned long AlignedPhyAddr = GETTABLEADDR(PhyAddr);
+	unsigned short PML4Index = CONVERTFROMPML4(VirtAddr);
+
+	long* PDPTTable = (long*)(GETTABLEADDR(PhysicalAccess(Pages)[PML4Index]));
+	unsigned short PDPTIndex = CONVERTFROMPDPT(VirtAddr);
+	
+	long* PDTable = (long*)(GETTABLEADDR(PhysicalAccess(PDPTTable)[PDPTIndex]));
+	unsigned short PDIndex = CONVERTFROMPD(VirtAddr);
+	
+	long* PTTable = (long*)(GETTABLEADDR(PhysicalAccess(PDTable)[PDIndex]));
+	unsigned short PTIndex = CONVERTFROMPT(VirtAddr);
+	
+	PhysicalAccess(PTTable)[PTIndex] = (long)AlignedPhyAddr | 0x7;
+	
+	return true;
+}
+
+void PageFile::Activate()
+{
+	asm volatile("MOV %0, %%CR3"
+			: : "a"(Pages));
+}
+
 void PageFile::SetupStartMemory()
 {
+	for(int i = 0; i < 512; i++)
+		PhysicalAccess(Pages)[i] = PhysicalAccess(ModelPaging.Pages)[i];
 	for(unsigned long i = 0; i < ProcessMemStart; i += 0x1000)
 	{
 		MapAddress(i, i);

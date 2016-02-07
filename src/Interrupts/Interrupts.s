@@ -1,5 +1,7 @@
 .code64
 
+RAXTEMP: .quad 0x0
+
 .global KeyboardInt
 .global SystemTimerInt
 .global ProcessSwitchInt
@@ -7,6 +9,7 @@
 .global Exc6, Exc7, Exc8, ExcA, ExcB, ExcC
 .global ExcD, ExcE, Exc10, Exc11, Exc12, Exc13
 .global Exc14, Exc1E
+.global SysCall, SwitchThread
 	
 KeyboardInt:
 	CALL KeyboardInterrupt
@@ -43,7 +46,6 @@ Exc5:
 	IRETQ
 
 Exc6:
-	POP %RAX
 	CALL InvalidOpExc
 	IRETQ
 
@@ -68,12 +70,17 @@ ExcC:
 	IRETQ
 
 ExcD:
+	MOV RAXTEMP, %RAX
+	POP %RAX
 	CALL GenProtExc
+	MOV %RAX, RAXTEMP
 	IRETQ
-
+	
 ExcE:
+	MOV RAXTEMP, %RAX
 	POP %RAX
 	CALL PageFaultExc
+	MOV %RAX, RAXTEMP
 	IRETQ
 
 Exc10:
@@ -99,3 +106,12 @@ Exc14:
 Exc1E:
 	CALL SecurityExc
 	IRETQ
+	
+SysCall:
+	CALL SysCallSwitch
+	IRETQ
+
+SwitchThread:
+	CALL SwitchProcesses
+	IRETQ
+	

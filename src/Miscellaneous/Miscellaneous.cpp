@@ -1,34 +1,5 @@
 extern SerialController Serial;
 
-void Kernel_Panic(char* Reason)
-{
-	CLI();
-	Output8(0x21, 0xFF); //Masking the PIC Master/Slave to stop all IRQs
-	Output8(0xA1, 0xFF);
-	Serial.WriteString(0x1, "\r\nStack");
-	long Temp = 0;
-	for(int i = 0; i < 15; i++)
-	{
-		Serial.WriteString(0x1, "\r\n");
-		Serial.WriteLongHex(0x1, i);
-		Serial.WriteString(0x1, ": ");
-		asm volatile("POP %0"
-		: "=a"(Temp));
-		Serial.WriteLongHex(0x1, Temp);
-	}
-	Serial.WriteString(0x1, "\r\nTime");
-	Serial.WriteLongHex(0x1, TimeSinceStart);
-	Serial.WriteString(0x1, "\r\nKernel panic: ");
-	Serial.WriteString(0x1, Reason);
-	
-	asm("CLI; HLT");
-}
-
-void Kernel_Panic(const char* Reason)
-{
-	Kernel_Panic((char*)Reason);
-}
-
 struct CPUIDdat
 {
 	bool PageSizeEx; //Checks if CR4.PSE can be set, enabling 4M-Byte pages in 32-bit paging
@@ -114,4 +85,16 @@ extern "C" void* memset(void* str, int c, long Size)
 {
 	for(long i = 0; i < Size; i++)
 		*(((char*)str)+i) = (unsigned char)c;
+}
+
+void WriteToLog(char* String)
+{
+	SerialLog.WriteToLog(String);
+}
+
+typedef unsigned long size_t;
+
+void* operator new (size_t size, void* ptr)
+{
+	return ptr;
 }

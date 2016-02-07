@@ -93,8 +93,8 @@ void PICMapping_Init(char PICMOff, char PICSOff)
 
 extern "C" void KeyboardInterrupt()
 {
-	CLI();
 	PushAll();
+	CLI();
 	char PressedKey = Input8(0x60);
 	bool Test;
 	if(PressedKey < 0x58)
@@ -106,14 +106,14 @@ extern "C" void KeyboardInterrupt()
 		Kernel_Panic("\r\nKeypress queue full!");
 	}
 	PICEndInt((char)1);
-	PopAll();
 	STI();
+	PopAll();
 }
 
 extern "C" void SystemTimerInterrupt()
 {
-	CLI();
 	PushAll();
+	CLI();
 	TimeSinceStart += 5;
 	CurrentProcess->Duration += 5;
 	PICEndInt((char)0);
@@ -124,6 +124,6 @@ extern "C" void SystemTimerInterrupt()
 	}
 	Output8(0x40, 0x4E); //Set lower byte 0x4E
 	Output8(0x40, 0x17); //set higher byte 0x17
-	PopAll();
 	STI();
+	PopAll();
 }

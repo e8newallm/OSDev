@@ -72,18 +72,17 @@ bool SerialController::WriteChar(short COMPort, char Character)
 
 bool SerialController::WriteString(short COMPort, char* String)
 {
-	CLI();
+	short Port = GetPort(COMPort);
 	for(int Pos = 0; String[Pos] != (char)0; Pos++)
 	{
-		WriteChar(COMPort, String[Pos]);
+		while(PortAvail(Port) == 0);
+		Output8(Port + SerialData, String[Pos]);
 	}
-	STI();
 	return true;
 }
 
 bool SerialController::WriteLongHex(short COMPort, long Value)
 {
-	CLI();
 	char Output[16];
 	int Pos = 0;
 	unsigned long Temp = Value;
@@ -103,17 +102,17 @@ bool SerialController::WriteLongHex(short COMPort, long Value)
 	
 	WriteChar(COMPort, '0');
 	WriteChar(COMPort, 'x');
+	short Port = GetPort(COMPort);
 	for(Pos--; Pos >= 0; Pos--)
 	{
-		WriteChar(COMPort, Output[Pos]);
+		while(PortAvail(Port) == 0);
+		Output8(Port + SerialData, Output[Pos]);
 	}
-	STI();
 	return true;
 }
 
 bool SerialController::WriteLong(short COMPort, long Value)
 {
-	CLI();
 	char Output[10];
 	int Pos = 0;
 	unsigned long Temp = Value;
@@ -129,11 +128,12 @@ bool SerialController::WriteLong(short COMPort, long Value)
 		Pos++;
 	}
 	
+	short Port = GetPort(COMPort);
 	for(Pos--; Pos >= 0; Pos--)
 	{
-		WriteChar(COMPort, Output[Pos]);
+		while(PortAvail(Port) == 0);
+		Output8(Port + SerialData, Output[Pos]);
 	}
-	STI();
 	return true;
 }
 
@@ -143,3 +143,53 @@ bool SerialController::WriteString(short COMPort, const char* String)
 }
 
 SerialController Serial;
+
+void YieldCPU();
+#define SerialQueueSize 30
+class SerialQueue : protected CriticalRegion
+{
+	private:
+	char SerialQueue[SerialQueueSize][256];
+	char Position = 0;
+	public:
+	void WriteToLog(char*);
+	void WriteToLog(const char*);
+	void ReadFromLog(char*);
+};
+
+void SerialQueue::WriteToLog(char* String)
+{
+	Lock();
+	while(Position >= SerialQueueSize)
+	{
+		Unlock();
+		YieldCPU();
+		Lock();
+	}
+	for(int i = 0; i < 256 && String[i] != (char)0; i++)
+		SerialQueue[Position][i] = String[i];
+	Position++;
+	Unlock();
+}
+
+void SerialQueue::WriteToLog(const char* String)
+{
+	WriteToLog((char*)String);
+}
+
+void SerialQueue::ReadFromLog(char* Destination)
+{
+	Lock();
+	while(Position == 0)
+	{
+		Unlock();
+		YieldCPU();
+		Lock();
+	}
+	Position--;
+	for(int i = 0; i < 256 && SerialQueue[Position][i] != (char)0; i++)
+		Destination[i] = SerialQueue[Position][i];
+	Unlock();
+}
+
+SerialQueue SerialLog;
