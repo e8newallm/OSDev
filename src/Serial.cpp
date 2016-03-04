@@ -146,14 +146,16 @@ SerialController Serial;
 
 void YieldCPU();
 #define SerialQueueSize 30
+
 class SerialQueue : protected CriticalRegion
 {
 	private:
-	char SerialQueue[SerialQueueSize][256];
+	volatile char Queue[SerialQueueSize][256];
 	char Position = 0;
 	public:
 	void WriteToLog(char*);
 	void WriteToLog(const char*);
+	void WriteToLog(long);
 	void ReadFromLog(char*);
 };
 
@@ -166,8 +168,40 @@ void SerialQueue::WriteToLog(char* String)
 		YieldCPU();
 		Lock();
 	}
-	for(int i = 0; i < 256 && String[i] != (char)0; i++)
-		SerialQueue[Position][i] = String[i];
+	int i;
+	for(i = 0; i < 256 && String[i] != (char)0; i++)
+		Queue[Position][i] = String[i];
+	Queue[Position][i] = (char)0;
+	Position++;
+	Unlock();
+}
+
+void SerialQueue::WriteToLog(long Value)
+{
+	Lock();
+	while(Position >= SerialQueueSize)
+	{
+		Unlock();
+		YieldCPU();
+		Lock();
+	}
+	int Pos = 2;
+	Queue[Position][0] = '0';
+	Queue[Position][1] = 'x';
+	int bits = 60;
+	bool HighDigit = false;
+	while(bits >= 0)
+	{
+		char Digit = (Value>>bits)&0xF;
+		if(HighDigit == true || Digit != 0 || bits == 0)
+		{
+			Queue[Position][Pos] = Hex[Digit];
+			Pos++;
+			HighDigit = true;
+		}
+		bits -= 4;
+	}
+	Queue[Position][Pos] = (char)0;
 	Position++;
 	Unlock();
 }
@@ -187,8 +221,12 @@ void SerialQueue::ReadFromLog(char* Destination)
 		Lock();
 	}
 	Position--;
-	for(int i = 0; i < 256 && SerialQueue[Position][i] != (char)0; i++)
-		Destination[i] = SerialQueue[Position][i];
+	int i;
+	for(i = 0; i < 256 && Queue[Position][i] != (char)0; i++)
+	{
+		Destination[i] = Queue[Position][i];
+	}
+	Destination[i] = Queue[Position][i];
 	Unlock();
 }
 

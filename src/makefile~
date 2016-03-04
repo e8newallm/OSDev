@@ -28,7 +28,7 @@ debug:
 	/home/e8newallm/OSDev/CrossCompiler/bin/x86_64-elf-objcopy -O elf32-i386 /home/e8newallm/OSDev/tmp/Kernel.elf /mnt/OSDevMount/Kernel.elf
 
 mount:
-	sudo mount /home/e8newallm/OSDev/VM/OSHDD.vhd /mnt/OSDevMount/
+	sudo mount /home/e8newallm/OSDev/VM/OSHDD.vhd /mnt/OSDevMount/Kernel.elf
 
 run:
 	bochs -qf /home/e8newallm/OSDev/VM/BochsConfig

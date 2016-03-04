@@ -114,16 +114,60 @@ extern "C" void SystemTimerInterrupt()
 {
 	PushAll();
 	CLI();
-	TimeSinceStart += 5;
-	CurrentProcess->Duration += 5;
+	TimeSinceStart += 10;
+	CurrentThreadDuration += 10;
+	CurrentPeriodDuration += 10;
+	short NewDuration = 0x2E9B;
+	Output8(0x40, NewDuration&0xFF); //Set lower byte 0x4E
+	Output8(0x40, NewDuration>>8); //set higher byte 0x17
 	PICEndInt((char)0);
-	if(CurrentProcess->Duration >= CurrentProcess->MaxDuration)
+	if((!CurrentThreadPeriod && CurrentPeriodDuration >= NormalThreadPeriod) || (CurrentThreadPeriod && CurrentPeriodDuration >= QuickThreadPeriod))
 	{
-		//Serial.WriteString(0x1, "Switching\r\n");
-		//SwitchProcesses();
+		if(!CurrentThreadPeriod)
+			LastNormalThread = CurrentThread;
+		else
+			CurrentThread = LastNormalThread;
+		CurrentThreadPeriod = !CurrentThreadPeriod;
+		CurrentPeriodDuration = 0;
+		SwitchProcesses();
 	}
-	Output8(0x40, 0x4E); //Set lower byte 0x4E
-	Output8(0x40, 0x17); //set higher byte 0x17
+	else if(CurrentThreadDuration >= CurrentThread->Duration)
+		SwitchProcesses();
 	STI();
 	PopAll();
+}
+
+extern "C" void SysCall();
+extern "C" void SwitchThread();
+
+extern "C" void SysCallSwitch()
+{
+	long RAX, RBX, RCX, RDX, R8; //RAX = FUNCTION
+	asm volatile("MOV %%RAX, %0":"=m"(RAX) :: "%rax");
+	asm volatile("MOV %%RBX, %0":"=m"(RBX) :: "%rbx");
+	asm volatile("MOV %%RCX, %0":"=m"(RCX) :: "%rcx");
+	asm volatile("MOV %%RDX, %0":"=m"(RDX) :: "%rdx");
+	
+	asm volatile("MOV %%R8, %0":"=m"(R8) :: "%r8");
+	
+	switch(RAX)
+	{
+		case PROCESS_MAKE_ID: //Create Process %RAX = PROCESS_MAKE_ID; %RBX = Main; %RCX = Name; Returns ID = %RAX
+		{
+			int ID = Process_Make((void*)RBX, (const char*)RCX);
+			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
+			break;
+		}
+		case THREAD_MAKE_ID: //Create Thread %RAX = THREAD_MAKE_ID; %RBX = Main; %RCX = ProcessID; Returns ID = %RAX
+		{
+			int ID = GetProcess(RCX)->Thread_Create((void*)RBX);
+			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
+			break;
+		}
+		case PAGE_MAP_ID: //Map virtual address %RAX = PAGE_MAP_ID; %RBX = Size; Returns nothing
+		{
+			AddVMemory(RBX);
+			break;
+		}
+	}
 }

@@ -126,14 +126,8 @@ extern "C" void PageFaultExc()
 	if(VirtualAddr >= StackSpaceStart && VirtualAddr < StackSpaceEnd)
 	{
 		long Temp = (long)PhysMemory.UseFreePhyAddr();
-		Serial.WriteString(0x1, "\r\nPage Fault: Mapping ");
-		Serial.WriteLongHex(0x1, (long)VirtualAddr);
-		Serial.WriteString(0x1, " to ");
-		Serial.WriteLongHex(0x1, Temp);
-		Serial.WriteString(0x1, "\r\nOffending program: ");
-		Serial.WriteString(0x1, (CurrentProcess->OwnerProcess)->ProcessName);
-		CurrentProcess->Page->MapAddress((unsigned long)Temp, (unsigned long)(VirtualAddr));
-		Serial.WriteString(0x1, "\r\nDone");
+		Serial.WriteString(0x1, (CurrentThread->OwnerProcess)->ProcessName);
+		CurrentThread->Page->MapAddress((unsigned long)Temp, (unsigned long)(VirtualAddr));
 	}
 	else
 	{
@@ -194,33 +188,4 @@ extern "C" void SecurityExc()
 	Output8(0x21, 0xFF); //Masking the PIC Master/Slave to stop all IRQs
 	Output8(0xA1, 0xFF);
 	Kernel_Panic("Security error (0x1E)");
-}
-
-extern "C" void SysCall();
-extern "C" void SwitchThread();
-
-//SYSCALL FUNCTION IDS
-#define PROCESS_MAKE_ID 0
-#define PAGING_MAP_ID 1
-extern "C" void SysCallSwitch()
-{
-	long RAX, RBX, RCX, RDX, R8; //RAX = FUNCTION
-	asm volatile("MOV %%RAX, %0":"=m"(RAX) :: "%rax");
-	asm volatile("MOV %%RBX, %0":"=m"(RBX) :: "%rbx");
-	asm volatile("MOV %%RCX, %0":"=m"(RCX) :: "%rcx");
-	asm volatile("MOV %%RDX, %0":"=m"(RDX) :: "%rdx");
-	
-	asm volatile("MOV %%R8, %0":"=m"(R8) :: "%r8");
-	
-	switch(RAX)
-	{
-		case PROCESS_MAKE_ID: //Create Process %RAX = 0x00; %RBX = Main; %RCX = Name; Returns ID = %RAX
-		{
-			int ID = Process_Make((void*)RBX, (const char*)RCX);
-			Serial.WriteString(0x1, "\r\nSysCall ID: ");
-			Serial.WriteLongHex(0x1, ID);
-			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
-			break;
-		}
-	}
 }

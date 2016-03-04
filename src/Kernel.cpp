@@ -1,27 +1,25 @@
 long TimeSinceStart;
 long TimeSinceStartPart;
 char TempStack[0x1000];
-bool Multitasking = false;
 bool Testing = false;
-#define CLI() __asm__("CLI");
-#define STI() __asm__("STI");
-unsigned char Hex[17] = "0123456789ABCDEF";
-unsigned char Dec[11] = "0123456789";
+
 void Kernel_Panic(const char*);
 #include "Sync.h"
+#include "Definitions.h"
+#include "HPET.h"
 #include "IO.cpp"
 #include "Serial.cpp"
 #include "Miscellaneous/Miscellaneous.cpp"
 #include "E820.h"
 #include "Memory/MemoryMap.cpp"
 #include "Memory/Paging.cpp"
-//#include "BasicFunctions.cpp"
 
 #include "Keyboard.cpp"
 #include "Process.cpp"
 #include "Memory/Malloc.cpp"
 
 #include "Video/Video.cpp"
+#include "Video/NewVideo.cpp"
 
 #include "Interrupts/Exceptions.cpp"
 #include "Interrupts/IDT.cpp"
@@ -46,7 +44,6 @@ long* IDTPos;
 multiboot_info_t* mbd;
 char* BDA = (char*)0x400;
 PageFile KernelMem; // The kernel memory
-
 #include "KernelProcesses.cpp"
 
 /////////////////////KERNEL START///////////////////////////
@@ -71,6 +68,18 @@ extern "C" void Kernel_Start()
 	IDT->Pointer.Base = (long*)IDT;
 	Pointer = (long*)&(IDT->Pointer);
 	PICMapping_Init(0x20, 0x28); //Initialise the PICs, Master mapped to 0x20 - 0x27, Slave mapped to 0x28 - 0x30
+	
+	//Finding the ACPI tables
+	RSDPDescriptor* RSDPSearch = (RSDPDescriptor*)0x10;
+	Serial.WriteString(0x1, "\r\nSearching for RSDP...");
+	while(strcmpl((char*)RSDPSearch, "RSD PTR ", 8))
+	{
+		RSDPSearch = (RSDPDescriptor*)((long)RSDPSearch + 0x10);
+	}
+	Serial.WriteString(0x1, "\r\n\tFound at ");
+	Serial.WriteLongHex(0x1, (long)RSDPSearch);
+		
+	
 	
 	//Setting the exception gates
 	SetGate(0x00, &Exc0, 0b11101110);
@@ -101,8 +110,6 @@ extern "C" void Kernel_Start()
 	TimeSinceStart = 0;
 	
 	Output8(0x43, 0b00110000); //Set counter 0 to Interrupt On Terminal Count 
-	Output8(0x40, 0x4E); //Set lower byte 0x4E
-	Output8(0x40, 0x17); //set higher byte 0x17
 	__asm__("PUSH %RAX; MOV (Pointer), %eax; LIDT (%eax);sti; POP %RAX");
 	
 	//Setting up TSS
@@ -121,8 +128,8 @@ extern "C" void Kernel_Start()
 	GDTTSS.base_high = (Base&0xFF000000)>>24; //isolate top byte.
 	GDTTSS.Base_top = Base>>32;
 	memset(&TSS, 0, sizeof(tss_entry));
-	
-	TSS.RSP0 = (unsigned long)StackBase; // ROFL THIS NEEDS CHANGING CAUSE DERP TWO SYS CALLS AT ONCE BREAKS IT
+	Serial.WriteString(0x1, "\r\n2");
+	TSS.RSP0 = (unsigned long)StackBase;
 	__asm__("PUSH %RAX; MOV $0x28, %AX; LTR %AX; POP %RAX");
 	for(MemorySeg* Position = PhysMemory.FindPhyAddr((void*)0x0); Position <= PhysMemory.FindPhyAddr(KernelMemoryEnd); Position++)
 	{
@@ -130,6 +137,8 @@ extern "C" void Kernel_Start()
 	}
 	ModelPaging.Pages = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
 	long FinalSeg = (PhysMemory.EOM() - 1)->BaseAddress;
+	Serial.WriteString(0x1, "\r\n2.5: ");
+	Serial.WriteLongHex(0x1, FinalSeg);
 	for(unsigned long i = 0; i < FinalSeg; i += 0x1000)
 	{
 		unsigned long AlignedPhyAddr = i & 0xFFFFFFFFFFFFF000;
@@ -158,6 +167,7 @@ extern "C" void Kernel_Start()
 		PETable[PTIndex] = (long)AlignedPhyAddr | 3;
 	}
 	PageFile TempPage;
+	Serial.WriteString(0x1, "\r\n3");
 	TempPage.Pages = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
 	for(int i = 0; i < 512; i++)
 		TempPage.Pages[i] = ModelPaging.Pages[i];
@@ -201,16 +211,23 @@ extern "C" void Kernel_Start()
 	{
 		ProcessList[i].Available = true;
 	}
-	
+	Serial.WriteString(0x1, "\r\n4");
 	int ID = Process_Make((void*)&SystemIdle, "Idle Process");
-	CurrentProcess = GetProcess(ID)->GetThread(0);
-	CurrentProcess->NextProcess = CurrentProcess;
-	//ID = Process_Make((void*)&Graphics, "Graphics Process");
-	//GetProcess(ID)->Start();
+	CurrentThread = GetProcess(ID)->GetThread(0);
+	CurrentThread->NextThread = CurrentThread;
+	ID = Process_Make((void*)&Graphics, "Graphics Process");
+	//CurrentThreadDuration = 0;
+	GetProcess(ID)->Start();
+	for(unsigned long i = 0; i <= GUI.BytesPerLine * GUI.Height; i += 0x1000)
+	{
+		GetProcess(ID)->Page.MapAddress(((unsigned long)GUI.FrameAddress + i), ((long)(CurrentThread->OwnerProcess)->MemStart) + i);
+	}
 	ID = Process_Make((void*)&SerialWrite, "Log writer");
 	GetProcess(ID)->Start();
+	ID = Process_Make((void*)&TaskManager, "Task Manager");
+	GetProcess(ID)->Start();
 	//Enables multitasking and PIT(As well as other IRQs)
-	Output8(PICM_Dat, 0xFC);
+	Output8(PICM_Dat, 0xFC); //0xFC
 	Output8(PICS_Dat, 0xFF);
 	Serial.WriteString(0x1, "\r\nProcesses starting");
 	StartProcesses();

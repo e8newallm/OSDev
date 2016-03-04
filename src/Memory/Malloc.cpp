@@ -6,83 +6,132 @@ void AddVMemory(unsigned long Size)
 {
 	int NewFrameCount = (Size / 0x1000) + 2;
 	int Current = 0;
-	MBlockHeader* Start = (CurrentProcess->OwnerProcess)->StartBlock;
-	MBlockHeader* PrevEnd = (CurrentProcess->OwnerProcess)->EndBlock;
+	MBlockHeader* Start = (CurrentThread->OwnerProcess)->StartBlock;
+	MBlockHeader* PrevEnd = (CurrentThread->OwnerProcess)->EndBlock;
 	while(Current < NewFrameCount)
 	{
-		(CurrentProcess->OwnerProcess)->EndBlock = (MBlockHeader*)(((long)(CurrentProcess->OwnerProcess)->EndBlock) + 0x1000);
-		(CurrentProcess->OwnerProcess)->Page.MapAddress((unsigned long)PhysMemory.UseFreePhyAddr(), (unsigned long)(CurrentProcess->OwnerProcess)->EndBlock);
+		(CurrentThread->OwnerProcess)->EndBlock = (MBlockHeader*)(((long)(CurrentThread->OwnerProcess)->EndBlock) + 0x1000);
+		(CurrentThread->OwnerProcess)->Page.MapAddress((unsigned long)PhysMemory.UseFreePhyAddr(), (unsigned long)(CurrentThread->OwnerProcess)->EndBlock);
+		//Serial.WriteString(0x1, "\r\nMapping ");
+		//Serial.WriteLongHex(0x1, (long)(CurrentProcess->OwnerProcess)->EndBlock);
 		Current++;
 	}
 	if(PrevEnd->PrevUsage == MBlockHeader_Free)
 		PrevEnd = (MBlockHeader*)((long)PrevEnd - PrevEnd->PrevSize - sizeof(MBlockHeader));
-	PrevEnd->NextSize = ((long)(CurrentProcess->OwnerProcess)->EndBlock - (long)PrevEnd) - sizeof(MBlockHeader);
+	PrevEnd->NextSize = ((long)(CurrentThread->OwnerProcess)->EndBlock - (long)PrevEnd) - sizeof(MBlockHeader);
 	PrevEnd->NextUsage = MBlockHeader_Free;
-	((CurrentProcess->OwnerProcess)->EndBlock)->PrevSize = ((long)(CurrentProcess->OwnerProcess)->EndBlock - (long)PrevEnd) - sizeof(MBlockHeader);
-	((CurrentProcess->OwnerProcess)->EndBlock)->PrevUsage = MBlockHeader_Free;
-	((CurrentProcess->OwnerProcess)->EndBlock)->NextUsage = MBlockHeader_End;
-	
-	MBlockHeader* Check = (MBlockHeader*)(CurrentProcess->OwnerProcess)->StartBlock;
-	long Count = 0;
+	((CurrentThread->OwnerProcess)->EndBlock)->PrevSize = ((long)(CurrentThread->OwnerProcess)->EndBlock - (long)PrevEnd) - sizeof(MBlockHeader);
+	((CurrentThread->OwnerProcess)->EndBlock)->PrevUsage = MBlockHeader_Free;
+	((CurrentThread->OwnerProcess)->EndBlock)->NextUsage = MBlockHeader_End;
 	
 	return;
 }
 
+void MapVirtualMem(unsigned long Size)
+{
+	asm volatile("INT $0x51" : : "a"(PAGE_MAP_ID), "b"(Size));
+}
+
+void PrintHeap()
+{
+	MBlockHeader* Start = (CurrentThread->OwnerProcess)->StartBlock;
+	int Block = 0;
+	Serial.WriteString(0x1, "\r\n\r\nPrinting Heap");
+	while(Start->NextUsage != MBlockHeader_End)
+	{
+		Serial.WriteString(0x1, "\r\n\r\nBlock ");
+		Serial.WriteLongHex(0x1, Block);
+		Serial.WriteString(0x1, "\r\nBlock Address: ");
+		Serial.WriteLongHex(0x1, (long)Start);
+		Serial.WriteString(0x1, "\r\nPrev Block Size: ");
+		Serial.WriteLongHex(0x1, Start->PrevSize);
+		Serial.WriteString(0x1, "\r\nPrev Block Usage: ");
+		Serial.WriteLongHex(0x1, Start->PrevUsage);
+		Serial.WriteString(0x1, "\r\nBlock Size: ");
+		Serial.WriteLongHex(0x1, Start->NextSize);
+		Serial.WriteString(0x1, "\r\nBlock Usage: ");
+		Serial.WriteLongHex(0x1, Start->NextUsage);
+		Block++;
+		Start = (MBlockHeader*)((long)Start + Start->NextSize + sizeof(MBlockHeader));
+	}
+	Serial.WriteString(0x1, "\r\n\r\nBlock ");
+	Serial.WriteLongHex(0x1, Block);
+	Serial.WriteString(0x1, "\r\nBlock Address: ");
+	Serial.WriteLongHex(0x1, (long)Start);
+	Serial.WriteString(0x1, "\r\nPrev Block Size: ");
+	Serial.WriteLongHex(0x1, Start->PrevSize);
+	Serial.WriteString(0x1, "\r\nPrev Block Usage: ");
+	Serial.WriteLongHex(0x1, Start->PrevUsage);
+	Serial.WriteString(0x1, "\r\nBlock Size: ");
+	Serial.WriteLongHex(0x1, Start->NextSize);
+	Serial.WriteString(0x1, "\r\nBlock Usage: ");
+	Serial.WriteLongHex(0x1, Start->NextUsage);
+	Serial.WriteString(0x1, "\r\nEnd of heap\r\n");
+}
+
+
 void* Malloc(unsigned long Size)
 {
-	//Serial.WriteString(0x1, "\r\nMalloc call");
+	Serial.WriteString(0x1, "\r\nMalloc call");
 	if(Size == 0)
 		return (void*)0;
 	if(Size > MallocBucketLimit) //If Size is too large to be used in the bucket memories
 	{
-		MBlockHeader* Check = (CurrentProcess->OwnerProcess)->StartBlock;
-		//Serial.WriteString(0x1, "\r\nTest. PrevUsage: ");
-		//Serial.WriteLongHex(0x1, Check->PrevUsage);
+		MBlockHeader* Check = (CurrentThread->OwnerProcess)->StartBlock;
+		Serial.WriteString(0x1, "\r\nTest. PrevUsage: ");
+		Serial.WriteLongHex(0x1, Check->PrevUsage);
 		while(1)
 		{
 			if(Check->NextUsage == MBlockHeader_Free)
 			{
-				//Serial.WriteString(0x1, "\r\nFree block. Check Size: ");
-				//Serial.WriteLongHex(0x1, Check->NextSize);
-				//Serial.WriteString(0x1, " Size: ");
-				//Serial.WriteLongHex(0x1, Size);
+				Serial.WriteString(0x1, "\r\nFree block. Check Size: ");
+				Serial.WriteLongHex(0x1, Check->NextSize);
+				Serial.WriteString(0x1, " Size: ");
+				Serial.WriteLongHex(0x1, Size);
 			}
 			if(Check->NextUsage == MBlockHeader_Free && Check->NextSize >= Size)
 			{
-				//Serial.WriteString(0x1, "\r\nBlock found");
+				Serial.WriteString(0x1, "\r\nBlock found");
 				if(Check->NextSize > Size)
 				{
-					//Serial.WriteString(0x1, "\r\nBlock larger");
+					Serial.WriteString(0x1, "\r\nBlock larger");
 					Check->NextUsage = MBlockHeader_InUse;
+					Serial.WriteString(0x1, "\r\nSize: ");
+					Serial.WriteLongHex(0x1, Check->NextSize + sizeof(MBlockHeader));
 					MBlockHeader* FinalBlock = (MBlockHeader*)((long)Check + Check->NextSize + sizeof(MBlockHeader));
 					Check->NextSize = Size;
 					MBlockHeader* NextBlock = (MBlockHeader*)((long)Check + Check->NextSize + sizeof(MBlockHeader));
 					NextBlock->PrevSize = Size;
+					Serial.WriteString(0x1, "\r\nBlock larger");
 					NextBlock->PrevUsage = MBlockHeader_InUse;
 					NextBlock->NextUsage = MBlockHeader_Free;
+					Serial.WriteString(0x1, "\r\nBlock larger");
 					NextBlock->NextSize = ((long)FinalBlock - (long)NextBlock - sizeof(MBlockHeader));
 					FinalBlock->PrevSize = ((long)FinalBlock - (long)NextBlock - sizeof(MBlockHeader));
+					Serial.WriteString(0x1, "\r\nBlock larger");
 					return (void*)((long)Check + sizeof(MBlockHeader));
 				}
 				else if(Check->NextSize == Size)
 				{
-					//Serial.WriteString(0x1, "\r\nBlock exact size");
+					Serial.WriteString(0x1, "\r\nBlock exact size");
 					Check->NextUsage = MBlockHeader_InUse;
 					((MBlockHeader*)((long)Check + Check->NextSize + sizeof(MBlockHeader)))->PrevUsage = MBlockHeader_InUse;
 					return (void*)((long)Check + sizeof(MBlockHeader));
 				}
 			}
-			//Serial.WriteString(0x1, "\r\nNext block");
+			Serial.WriteString(0x1, "\r\nNext block");
 			if(Check->NextUsage == MBlockHeader_End)
 			{
-				//Serial.WriteString(0x1, "\r\nAllocation Needed");
+				Serial.WriteString(0x1, "\r\nAllocation Needed");
 				if(Check->PrevUsage == MBlockHeader_Free)
 					Check = (MBlockHeader*)((long)Check - Check->PrevSize - sizeof(MBlockHeader));
-				AddVMemory(Size);
+				PrintHeap();
+				MapVirtualMem(Size);
+				PrintHeap();
 			}
 			else
 			{
-				//Serial.WriteString(0x1, "\r\nNo allocation Needed");
+				Serial.WriteString(0x1, "\r\nNo allocation Needed");
 				Check = (MBlockHeader*)((long)Check + Check->NextSize + sizeof(MBlockHeader));
 			}
 		}

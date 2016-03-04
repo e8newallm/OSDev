@@ -4,28 +4,40 @@ __attribute__((noinline)) int CreateProcess(void* Main, const char* Name)
 {
 
 	long ProcessID = 0;
-	asm volatile("INT $0x51" : "=a"(ProcessID) : "a"(0x0), "b"(Main), "c"(Name));
+	asm volatile("INT $0x51" : "=a"(ProcessID) : "a"(PROCESS_MAKE_ID), "b"(Main), "c"(Name));
 	return ProcessID;
 }
+
+__attribute__((noinline)) int CreateThread(void* Main, int ProcessID)
+{
+
+	long ThreadID = 0;
+	asm volatile("INT $0x51" : "=a"(ThreadID) : "a"(THREAD_MAKE_ID), "b"(Main), "c"(ProcessID));
+	return ThreadID;
+}
+
+/*__attribute__((noinline)) int CreateQThread(void* Main, int ProcessID, int Duration)
+{
+
+	long ThreadID = 0;
+	asm volatile("INT $0x51" : "=a"(ThreadID) : "a"(QTHREAD_MAKE_ID), "b"(Main), "c"(ProcessID), );
+	return ThreadID;
+}*/
+
 
 /////////////////////////TEST PROGRAMS////////////////////////////////////////////
 
 __attribute__((noinline)) volatile void Graphics()
 {
-	while(1)
-		YieldCPU();
-	/*for(unsigned long i = 0; i <= GUI.BytesPerLine * GUI.Height; i += 0x1000)
-	{
-		(CurrentProcess->Page)->MapAddress(((unsigned long)GUI.FrameAddress + i), ((long)(CurrentProcess->OwnerProcess)->MemStart) + i);
-	}
 	//Serial.WriteString(0x1, "\r\nDone");
-	GUI.FrameAddress = (unsigned char*)((long)(CurrentProcess->OwnerProcess)->MemStart);
+	GUI.FrameAddress = (unsigned char*)((long)(CurrentThread->OwnerProcess)->MemStart);
 	char shade = 255;
 	char* MainFrame = (char*)GUI.FrameAddress;
 	char* NewFrame = (char*)GUI.SecondFrameAddress;
 	//Serial.WriteString(0x1, "\r\nWhile(1)");
 	while(1)
 	{
+		/*for(int i = 0; i < GUI.Height; i++)
 		for(int i = 0; i < GUI.Height; i++)
 		{
 			for(int j = 0; j < (GUI.Width*GUI.Depth); j++)
@@ -33,9 +45,11 @@ __attribute__((noinline)) volatile void Graphics()
 				int pos = (i * GUI.BytesPerLine) + j;
 				MainFrame[pos] = NewFrame[pos];
 			}
-		}
+		}*/
+		for(long i = 0; i < (GUI.Height * GUI.BytesPerLine)/8; i++)
+		((long*)MainFrame)[i] = ((long*)NewFrame)[i];
 		YieldCPU();
-	}*/
+	}
 }
 
 __attribute__((noinline)) volatile void SerialWrite()
@@ -44,122 +58,51 @@ __attribute__((noinline)) volatile void SerialWrite()
 	while(1)
 	{
 		SerialLog.ReadFromLog(NextLog);
-		Serial.WriteString(0x1, "\r\nWriting to log: ");
+		Serial.WriteString(0x1, "\r\n");
 		Serial.WriteString(0x1, NextLog);
 	}
 }
 
-__attribute__((noinline)) volatile void TestProcess()
+__attribute__((noinline)) volatile void TaskManager()
 {
-	//Serial.WriteString(0x1, "\r\nGraphics Loaded!");
-	int x = 214, y = 532;
-	int xVel = 15, yVel = 18;
-	long Width = GUI.Width, Height = GUI.Height;
-	long Time = TimeSinceStart;
+	Draw Window = Draw(0, 0, GUI.Width/2, GUI.Height*3/4 + 7, GUI.Width, GUI.Height);
+	SerialLog.WriteToLog("Shiet");
 	while(1)
 	{
-		//Serial.WriteString(0x1, "\r\nTesting");
-		GUI.DrawPixel(x, y, (char)(128), (char)(50), (char)(75));
-		GUI.DrawPixel(x+1, y, (char)(128), (char)(50), (char)(75));
-		GUI.DrawPixel(x, y+1, (char)(128), (char)(50), (char)(75));
-		GUI.DrawPixel(x+1, y+1, (char)(128), (char)(50), (char)(75));
-		//while(TimeSinceStart - Time < 500)
-		//{
-			YieldCPU();
-		//}
-		Time = TimeSinceStart;
-		GUI.DrawPixel(x, y, (char)(0), (char)(0), (char)(0));
-		GUI.DrawPixel(x+1, y, (char)(0), (char)(0), (char)(0));
-		GUI.DrawPixel(x, y+1, (char)(0), (char)(0), (char)(0));
-		GUI.DrawPixel(x+1, y+1, (char)(0), (char)(0), (char)(0));
-		//DrawString("Test string", 11, x, y);
-		x += xVel;
-		y += yVel;
-		if(x < 0)
+		Window.DrawRect(3, 3, (GUI.Width/2) - 6, GUI.Height*3/4 + 4, 255, 255, 255);
+		Window.DrawRect(5, 5, (GUI.Width/2) - 10, GUI.Height*3/4, 128, 128, 128);
+		Window.DrawString("Task Manager", 10, 10);
+		int y = 25;
+		int CurProcessID = 0;
+		Process* CurProcess = GetProcess(0);
+		while(CurProcess->Available == false)
 		{
-			x = 0;
-			xVel = -xVel;
+			int CurThreadID = 0;
+			Window.DrawString(CurProcess->ProcessName, 19, y);
+			y += 15;
+			CurProcessID++;
+			CurProcess = GetProcess(CurProcessID);
 		}
-		else if(x > GUI.Width)
-		{
-			x = GUI.Width;
-			xVel = -xVel;
-		}
-		if(y < 0)
-		{
-			y = 0;
-			yVel = -yVel;
-		}
-		else if(y > GUI.Height)
-		{
-			y = GUI.Height;
-			yVel = -yVel;
-		}
+		Window.Update();
+		YieldCPU();
 	}
 }
 
-__attribute__((noinline)) volatile void TestProcessTwo()
-{
-	//Serial.WriteString(0x1, "\r\nGraphics Loaded!");
-	int x = 214, y = 532;
-	int xVel = -15, yVel = -18;
-	long Width = GUI.Width, Height = GUI.Height;
-	long Time = TimeSinceStart;
-	while(1)
-	{
-		//Serial.WriteString(0x1, "\r\nTesting");
-		GUI.DrawPixel(x, y, (char)(128), (char)(50), (char)(75));
-		GUI.DrawPixel(x+1, y, (char)(128), (char)(50), (char)(75));
-		GUI.DrawPixel(x, y+1, (char)(128), (char)(50), (char)(75));
-		GUI.DrawPixel(x+1, y+1, (char)(128), (char)(50), (char)(75));
-		//while(TimeSinceStart - Time < 500)
-		//{
-			YieldCPU();
-		//}
-		Time = TimeSinceStart;
-		GUI.DrawPixel(x, y, (char)(0), (char)(0), (char)(0));
-		GUI.DrawPixel(x+1, y, (char)(0), (char)(0), (char)(0));
-		GUI.DrawPixel(x, y+1, (char)(0), (char)(0), (char)(0));
-		GUI.DrawPixel(x+1, y+1, (char)(0), (char)(0), (char)(0));
-		//DrawString("Test string", 11, x, y);
-		x += xVel;
-		y += yVel;
-		if(x < 0)
-		{
-			x = 0;
-			xVel = -xVel;
-		}
-		else if(x > GUI.Width)
-		{
-			x = GUI.Width;
-			xVel = -xVel;
-		}
-		if(y < 0)
-		{
-			y = 0;
-			yVel = -yVel;
-		}
-		else if(y > GUI.Height)
-		{
-			y = GUI.Height;
-			yVel = -yVel;
-		}
-	}
-}
+/*int QuickThreadPeriod = 600;
+int NormalThreadPeriod = 400;
+bool CurrentThreadPeriod = 0; // 0 = Normal; 1 = Quick
+int CurrentPeriodDuration = 0;
+Thread* LastNormalThread;*/
 
 __attribute__((noinline)) volatile void SystemIdle()
 {
-	Serial.WriteString(0x1, "\r\nTesting TSS0: ");
-	Serial.WriteLongHex(0x1, TSS.RSP0);
-	Serial.WriteString(0x1, "\r\n Stack: ");
-	Serial.WriteLongHex(0x1, GetProcess(0)->GetThread(0)->TSSRSP);
-	
-	//int Test = CreateProcess((void*)&TestProcess, "Test Program");
-	//GetProcess(Test)->Start();
-	//SerialLog.WriteToLog("TEST SHIT");
+	SerialLog.WriteToLog("TEST SHIT");
 	while(1)
 	{
 		YieldCPU();
-		SerialLog.WriteToLog("\r\nTesting");
+		SerialLog.WriteToLog("Normal Thread Period");
+		//SerialLog.WriteToLog(NormalThreadPeriod);
+		SerialLog.WriteToLog("Current Period Duration");
+		//SerialLog.WriteToLog(CurrentPeriodDuration);
 	}
 }

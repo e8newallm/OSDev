@@ -109,7 +109,7 @@ void DrawCharacter(char Character, long x, long y)
 			if(Line & (1 << (7 - j)))
 			{
 				*GUI(x+j, y+i) = 0x0;
-				*(GUI(x+j, y+i) + 1) = 0xFF;
+				*(GUI(x+j, y+i) + 1) = 0x0;
 				*(GUI(x+j, y+i) + 2)= 0x0;
 			}
 		}
@@ -128,4 +128,18 @@ void DrawString(char* String, int Length, long x, long y)
 void DrawString(const char* String, int Length, long x, long y)
 {
 	DrawString((char*)String, Length, x, y);
+}
+
+void DrawString(char* String, long x, long y)
+{
+	for(int i = 0; String[i] != (char)0; i++)
+	{
+		DrawCharacter(String[i], x, y);
+		x += 9;
+	}
+}
+
+void DrawString(const char* String, long x, long y)
+{
+	DrawString((char*)String, x, y);
 }
