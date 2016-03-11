@@ -53,6 +53,7 @@ extern "C" void Kernel_Start()
 	CLI();
 	//Setup Serial ports
 	Serial.Setup(BDA);
+	Serial.WriteString(0x1, "\r\nSerial Setup");
 	//Setting up memory map
 	PhysMemory.Initialise(mbd, (MemorySeg*)&KernelEnd, 0x1000);
 	MemorySeg* LoopChk = PhysMemory.FindPhyAddr(&KernelEnd);
@@ -71,15 +72,10 @@ extern "C" void Kernel_Start()
 	
 	//Finding the ACPI tables
 	RSDPDescriptor* RSDPSearch = (RSDPDescriptor*)0x10;
-	Serial.WriteString(0x1, "\r\nSearching for RSDP...");
 	while(strcmpl((char*)RSDPSearch, "RSD PTR ", 8))
 	{
 		RSDPSearch = (RSDPDescriptor*)((long)RSDPSearch + 0x10);
 	}
-	Serial.WriteString(0x1, "\r\n\tFound at ");
-	Serial.WriteLongHex(0x1, (long)RSDPSearch);
-		
-	
 	
 	//Setting the exception gates
 	SetGate(0x00, &Exc0, 0b11101110);
@@ -128,7 +124,6 @@ extern "C" void Kernel_Start()
 	GDTTSS.base_high = (Base&0xFF000000)>>24; //isolate top byte.
 	GDTTSS.Base_top = Base>>32;
 	memset(&TSS, 0, sizeof(tss_entry));
-	Serial.WriteString(0x1, "\r\n2");
 	TSS.RSP0 = (unsigned long)StackBase;
 	__asm__("PUSH %RAX; MOV $0x28, %AX; LTR %AX; POP %RAX");
 	for(MemorySeg* Position = PhysMemory.FindPhyAddr((void*)0x0); Position <= PhysMemory.FindPhyAddr(KernelMemoryEnd); Position++)
@@ -137,8 +132,6 @@ extern "C" void Kernel_Start()
 	}
 	ModelPaging.Pages = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
 	long FinalSeg = (PhysMemory.EOM() - 1)->BaseAddress;
-	Serial.WriteString(0x1, "\r\n2.5: ");
-	Serial.WriteLongHex(0x1, FinalSeg);
 	for(unsigned long i = 0; i < FinalSeg; i += 0x1000)
 	{
 		unsigned long AlignedPhyAddr = i & 0xFFFFFFFFFFFFF000;
@@ -167,7 +160,6 @@ extern "C" void Kernel_Start()
 		PETable[PTIndex] = (long)AlignedPhyAddr | 3;
 	}
 	PageFile TempPage;
-	Serial.WriteString(0x1, "\r\n3");
 	TempPage.Pages = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
 	for(int i = 0; i < 512; i++)
 		TempPage.Pages[i] = ModelPaging.Pages[i];
@@ -211,17 +203,12 @@ extern "C" void Kernel_Start()
 	{
 		ProcessList[i].Available = true;
 	}
-	Serial.WriteString(0x1, "\r\n4");
 	int ID = Process_Make((void*)&SystemIdle, "Idle Process");
 	CurrentThread = GetProcess(ID)->GetThread(0);
 	CurrentThread->NextThread = CurrentThread;
 	ID = Process_Make((void*)&Graphics, "Graphics Process");
-	//CurrentThreadDuration = 0;
 	GetProcess(ID)->Start();
-	for(unsigned long i = 0; i <= GUI.BytesPerLine * GUI.Height; i += 0x1000)
-	{
-		GetProcess(ID)->Page.MapAddress(((unsigned long)GUI.FrameAddress + i), ((long)(CurrentThread->OwnerProcess)->MemStart) + i);
-	}
+	Serial.WriteString(0x1, "\r\nDone mapping");
 	ID = Process_Make((void*)&SerialWrite, "Log writer");
 	GetProcess(ID)->Start();
 	ID = Process_Make((void*)&TaskManager, "Task Manager");
@@ -229,7 +216,6 @@ extern "C" void Kernel_Start()
 	//Enables multitasking and PIT(As well as other IRQs)
 	Output8(PICM_Dat, 0xFC); //0xFC
 	Output8(PICS_Dat, 0xFF);
-	Serial.WriteString(0x1, "\r\nProcesses starting");
 	StartProcesses();
 }
 /////////////////////KERNEL END///////////////////////////

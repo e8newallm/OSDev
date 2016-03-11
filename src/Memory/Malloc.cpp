@@ -72,66 +72,45 @@ void PrintHeap()
 
 void* Malloc(unsigned long Size)
 {
-	Serial.WriteString(0x1, "\r\nMalloc call");
 	if(Size == 0)
 		return (void*)0;
 	if(Size > MallocBucketLimit) //If Size is too large to be used in the bucket memories
 	{
 		MBlockHeader* Check = (CurrentThread->OwnerProcess)->StartBlock;
-		Serial.WriteString(0x1, "\r\nTest. PrevUsage: ");
-		Serial.WriteLongHex(0x1, Check->PrevUsage);
 		while(1)
 		{
-			if(Check->NextUsage == MBlockHeader_Free)
-			{
-				Serial.WriteString(0x1, "\r\nFree block. Check Size: ");
-				Serial.WriteLongHex(0x1, Check->NextSize);
-				Serial.WriteString(0x1, " Size: ");
-				Serial.WriteLongHex(0x1, Size);
-			}
 			if(Check->NextUsage == MBlockHeader_Free && Check->NextSize >= Size)
 			{
-				Serial.WriteString(0x1, "\r\nBlock found");
 				if(Check->NextSize > Size)
 				{
-					Serial.WriteString(0x1, "\r\nBlock larger");
 					Check->NextUsage = MBlockHeader_InUse;
-					Serial.WriteString(0x1, "\r\nSize: ");
-					Serial.WriteLongHex(0x1, Check->NextSize + sizeof(MBlockHeader));
 					MBlockHeader* FinalBlock = (MBlockHeader*)((long)Check + Check->NextSize + sizeof(MBlockHeader));
 					Check->NextSize = Size;
 					MBlockHeader* NextBlock = (MBlockHeader*)((long)Check + Check->NextSize + sizeof(MBlockHeader));
 					NextBlock->PrevSize = Size;
-					Serial.WriteString(0x1, "\r\nBlock larger");
 					NextBlock->PrevUsage = MBlockHeader_InUse;
 					NextBlock->NextUsage = MBlockHeader_Free;
-					Serial.WriteString(0x1, "\r\nBlock larger");
 					NextBlock->NextSize = ((long)FinalBlock - (long)NextBlock - sizeof(MBlockHeader));
 					FinalBlock->PrevSize = ((long)FinalBlock - (long)NextBlock - sizeof(MBlockHeader));
-					Serial.WriteString(0x1, "\r\nBlock larger");
 					return (void*)((long)Check + sizeof(MBlockHeader));
 				}
 				else if(Check->NextSize == Size)
 				{
-					Serial.WriteString(0x1, "\r\nBlock exact size");
 					Check->NextUsage = MBlockHeader_InUse;
 					((MBlockHeader*)((long)Check + Check->NextSize + sizeof(MBlockHeader)))->PrevUsage = MBlockHeader_InUse;
 					return (void*)((long)Check + sizeof(MBlockHeader));
 				}
 			}
-			Serial.WriteString(0x1, "\r\nNext block");
 			if(Check->NextUsage == MBlockHeader_End)
 			{
-				Serial.WriteString(0x1, "\r\nAllocation Needed");
 				if(Check->PrevUsage == MBlockHeader_Free)
 					Check = (MBlockHeader*)((long)Check - Check->PrevSize - sizeof(MBlockHeader));
-				PrintHeap();
+				//PrintHeap();
 				MapVirtualMem(Size);
-				PrintHeap();
+				//PrintHeap();
 			}
 			else
 			{
-				Serial.WriteString(0x1, "\r\nNo allocation Needed");
 				Check = (MBlockHeader*)((long)Check + Check->NextSize + sizeof(MBlockHeader));
 			}
 		}

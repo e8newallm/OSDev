@@ -126,6 +126,11 @@ extern "C" void PageFaultExc()
 	if(VirtualAddr >= StackSpaceStart && VirtualAddr < StackSpaceEnd)
 	{
 		long Temp = (long)PhysMemory.UseFreePhyAddr();
+		Serial.WriteString(0x1, "\r\nStack Page Fault\tMapping ");
+		Serial.WriteLongHex(0x1, Temp);
+		Serial.WriteString(0x1, " to ");
+		Serial.WriteLongHex(0x1, VirtualAddr);
+		Serial.WriteString(0x1, " for ");
 		Serial.WriteString(0x1, (CurrentThread->OwnerProcess)->ProcessName);
 		CurrentThread->Page->MapAddress((unsigned long)Temp, (unsigned long)(VirtualAddr));
 	}

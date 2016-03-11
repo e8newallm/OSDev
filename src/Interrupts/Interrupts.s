@@ -16,7 +16,41 @@ KeyboardInt:
 	IRETQ
 	
 SystemTimerInt:
+	PUSH %RBP
+	PUSH %RAX
+	PUSH %RCX
+	PUSH %RBX
+	PUSH %RDX
+	PUSH %RSI
+	PUSH %RDI
+	PUSH %R8
+	PUSH %R9
+	PUSH %R10
+	PUSH %R11
+	PUSH %R12
+	PUSH %R13
+	PUSH %R14
+	PUSH %R15
+	PUSHF
 	CALL SystemTimerInterrupt
+		
+	POPF
+	POP %R15
+	POP %R14
+	POP %R13
+	POP %R12
+	POP %R11
+	POP %R10
+	POP %R9
+	POP %R8
+	POP %RDI
+	POP %RSI
+	POP %RDX
+	POP %RBX
+	POP %RCX
+	POP %RAX
+	POP %RBP
+	
 	IRETQ
 
 ################ Exception handlers ######################
@@ -108,10 +142,74 @@ Exc1E:
 	IRETQ
 	
 SysCall:
+	PUSH %RBP
+	PUSH %RAX
+	PUSH %RCX
+	PUSH %RBX
+	PUSH %RDX
+	PUSH %RSI
+	PUSH %RDI
+	PUSH %R8
+	PUSH %R9
+	PUSH %R10
+	PUSH %R11
+	PUSH %R12
+	PUSH %R13
+	PUSH %R14
+	PUSH %R15
+	PUSHF
 	CALL SysCallSwitch
+	POPF
+	POP %R15
+	POP %R14
+	POP %R13
+	POP %R12
+	POP %R11
+	POP %R10
+	POP %R9
+	POP %R8
+	POP %RDI
+	POP %RSI
+	POP %RDX
+	POP %RBX
+	POP %RCX
+	POP %RAX
+	POP %RBP
 	IRETQ
 
 SwitchThread:
+	PUSH %RBP
+	PUSH %RAX
+	PUSH %RCX
+	PUSH %RBX
+	PUSH %RDX
+	PUSH %RSI
+	PUSH %RDI
+	PUSH %R8
+	PUSH %R9
+	PUSH %R10
+	PUSH %R11
+	PUSH %R12
+	PUSH %R13
+	PUSH %R14
+	PUSH %R15
+	PUSHF
 	CALL SwitchProcesses
+	POPF
+	POP %R15
+	POP %R14
+	POP %R13
+	POP %R12
+	POP %R11
+	POP %R10
+	POP %R9
+	POP %R8
+	POP %RDI
+	POP %RSI
+	POP %RDX
+	POP %RBX
+	POP %RCX
+	POP %RAX
+	POP %RBP
 	IRETQ
 	

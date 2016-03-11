@@ -1,10 +1,13 @@
 extern "C" void SwitchProcesses();
+extern "C" void InitThread();
 extern tss_entry TSS;
 
+extern "C" void SwitchASM(long** OldRSP, long** NewRSP, long* NewCR3);
+extern "C" void StartASM(long* NewRSP, long* NewCR3);
 
 void* Malloc(unsigned long);
 void ReturnThread();
-void BeginThread();
+extern "C" void BeginThread();
 
 struct MBlockHeader 
 {
@@ -141,36 +144,42 @@ Process::Process()
 
 extern "C" void SwitchProcesses() //SHORTEST REMAINING TIME
 {
-	asm("PUSH %RBP; PUSH %RAX; PUSH %RCX; PUSH %RBX; PUSH %RDX; PUSH %RSI; PUSH %RDI; PUSH %R8; PUSH %R9; PUSH %R10; PUSH %R11; PUSH %R12; PUSH %R13; PUSH %R14; PUSH %R15; PUSHF");
 	CurrentThreadDuration = 0;
 	
 	Thread* Next = (Thread*)0;
 	if(CurrentThreadPeriod)
 	{
-		SerialLog.WriteToLog("Quickthread time");
-		for(unsigned char i = 0; i < 256; i++)
+		//Serial.WriteString(0x1, "\r\nQuickthread time");
+		for(unsigned short i = 0; i < 256; i++)
 		{
 			Process* CurProcess = GetProcess(i);
-			if(CurProcess->Available)
+			if(!CurProcess->Available)
 			{
-				for(unsigned char j = 0; j < 256; j++)
+				for(unsigned short j = 0; j < 256; j++)
 				{
 					Thread* CurThread = CurProcess->GetThread(j);
-					if(CurThread->Type && (Next == (Thread*)0 || CurThread->MaxDuration < Next->MaxDuration))
+					if(!CurThread->Available && CurThread->Type && (Next == (Thread*)0 || CurThread->MaxDuration < Next->MaxDuration))
 						Next = CurThread;
 				}
 			}
 		}
 		if(Next == (Thread*)0) //No quickthreads
 		{
-			SerialLog.WriteToLog("\tNo quickthreads");
+			//Serial.WriteString(0x1, "\tNo quickthreads");
 			CurrentThread = LastNormalThread;
 			CurrentThreadPeriod = !CurrentThreadPeriod;
+			Next = CurrentThread->NextThread;
+			while(Next->Killed)
+			{
+				Next->Available = true;
+				Next = Next->NextThread;
+				CurrentThread->NextThread = Next;
+			}
 		}
 	}
-	if(!CurrentThreadPeriod)
+	else
 	{
-		//SerialLog.WriteToLog("\r\nNormal thread time");
+		//Serial.WriteString(0x1, "\r\nNormalthread time"); // BREAKS ON PIT SWAP
 		Next = CurrentThread->NextThread;
 		while(Next->Killed)
 		{
@@ -180,51 +189,22 @@ extern "C" void SwitchProcesses() //SHORTEST REMAINING TIME
 		}
 	}
 	
-	asm volatile("MOV %%RSP, %0" : "=r"(CurrentThread->TSSRSP));
-	long* NextRSP = Next->TSSRSP;
+	long** NextRSP = &(Next->TSSRSP);
 	long* NextPage = (Next->Page)->Pages;
+	long** CurrentRSP = &(CurrentThread->TSSRSP);
 	CurrentThread = CurrentThread->NextThread;
-	asm volatile("MOV %1, %%CR3; MOV %0, %%RSP;"
-			 : :  "r"(NextRSP), "r"(NextPage));
 	TSS.RSP0 = (unsigned long)CurrentThread->TSSRBP;
-	asm("POPF; POP %R15; POP %R14; POP %R13; POP %R12; POP %R11; POP %R10; POP %R9; POP %R8; POP %RDI; POP %RSI; POP %RDX; POP %RBX; POP %RCX; POP %RAX; POP %RBP");
+	SwitchASM(CurrentRSP, NextRSP, NextPage);
 }
-
-/*extern "C" void SwitchProcesses() //ROUND ROBIN
-{
-	asm("PUSH %RBP; PUSH %RAX; PUSH %RCX; PUSH %RBX; PUSH %RDX; PUSH %RSI; PUSH %RDI; PUSH %R8; PUSH %R9; PUSH %R10; PUSH %R11; PUSH %R12; PUSH %R13; PUSH %R14; PUSH %R15; PUSHF");
-	CurrentThreadDuration = 0;
-	Thread* Next = CurrentThread->NextThread;
-	while(Next->Killed)
-	{
-		Next->Available = true;
-		Next = Next->NextThread;
-		CurrentThread->NextThread = Next;
-	}
-	asm volatile("MOV %%RSP, %0" : "=r"(CurrentThread->TSSRSP));
-	long* NextRSP = Next->TSSRSP;
-	long* NextPage = (Next->Page)->Pages;
-	CurrentThread = CurrentThread->NextThread;
-	asm volatile("MOV %1, %%CR3; MOV %0, %%RSP;"
-			 : :  "r"(NextRSP), "r"(NextPage));
-	TSS.RSP0 = (unsigned long)CurrentThread->TSSRBP;
-	//short NewDuration = 1193182 * (CurrentProcess->Duration / 1000);
-	//Output8(0x40, NewDuration&0xFF); //Set lower byte 0x4E
-	//Output8(0x40, NewDuration>>8); //set higher byte 0x17
-	asm("POPF; POP %R15; POP %R14; POP %R13; POP %R12; POP %R11; POP %R10; POP %R9; POP %R8; POP %RDI; POP %RSI; POP %RDX; POP %RBX; POP %RCX; POP %RAX; POP %RBP");
-}*/
 
 void StartProcesses()
 {
 	long* NextRSP = CurrentThread->TSSRSP;
 	long* NextPage = (CurrentThread->Page)->Pages;
-	asm volatile("MOV %1, %%CR3; MOV %0, %%RSP;"
-				 : : "r"(NextRSP), "r"(NextPage));
 	TSS.RSP0 = (unsigned long)CurrentThread->TSSRBP;
-	short NewDuration = 0x2E9B;
-	Output8(0x40, NewDuration&0xFF); //Set lower byte 0x4E
-	Output8(0x40, NewDuration>>8); //set higher byte 0x17
-	asm("POPF; POP %R15; POP %R14; POP %R13; POP %R12; POP %R11; POP %R10; POP %R9; POP %R8; POP %RDI; POP %RSI; POP %RDX; POP %RBX; POP %RCX; POP %RAX; POP %RBP");
+	Output8(0x40, 0x9B);
+	Output8(0x40, 0x2E);
+	StartASM(NextRSP, NextPage);
 }
 
 void Process::Start()
@@ -285,10 +265,10 @@ Thread::Thread(void* Main, Process* OwnerProcessIn, PageFile* PageIn, long IDThr
 	long Temp = (long)PhysMemory.UseFreePhyAddr();
 	Page->MapAddress(Temp, (unsigned long)((Stack + TSSOffset - 1)));
 	TSSRSP = (long*)((Stack + TSSOffset - 1) - (8 * 17)); //Add starting values to stack for ProcessSwitch to switch in
-	TSSRBP = (long*)(Stack + TSSOffset - 8);
+	TSSRBP = (long*)(Stack + TSSOffset - 1);
 	long* StackSetup = PhysicalAccess(Temp  + 0xFFF - (8 * 17));
 	StackSetup[0] = 0x3200; //EFLAG starting value (IF=1 IOPL=2)
-	StackSetup[16] = (long)&BeginThread; //Code start address
+	StackSetup[16] = (long)&InitThread; //Code start address
 	StackSetup[15] = (long)(Stack + StackSize - 1);
 	Temp = (long)PhysMemory.UseFreePhyAddr();
 	Page->MapAddress(Temp, (unsigned long)(Stack + StackSize - 0x1000));
@@ -311,10 +291,10 @@ Thread::Thread(void* Main, Process* OwnerProcessIn, PageFile* PageIn, long IDThr
 	long Temp = (long)PhysMemory.UseFreePhyAddr();
 	Page->MapAddress(Temp, (unsigned long)((Stack + TSSOffset - 1)));
 	TSSRSP = (long*)((Stack + TSSOffset - 1) - (8 * 17)); //Add starting values to stack for ProcessSwitch to switch in
-	TSSRBP = (long*)(Stack + TSSOffset - 8);
+	TSSRBP = (long*)(Stack + TSSOffset - 1);
 	long* StackSetup = PhysicalAccess(Temp  + 0xFFF - (8 * 17));
 	StackSetup[0] = 0x3200; //EFLAG starting value (IF=1 IOPL=2)
-	StackSetup[16] = (long)&BeginThread; //Code start address
+	StackSetup[16] = (long)&InitThread; //Code start address
 	StackSetup[15] = (long)(Stack + StackSize - 1);
 	Temp = (long)PhysMemory.UseFreePhyAddr();
 	Page->MapAddress(Temp, (unsigned long)(Stack + StackSize - 0x1000));
@@ -343,11 +323,10 @@ void Thread::Kill()
 	//TODO: Add freeing of memory and closing of process if the current active one
 }
 
-__attribute__((noinline)) void BeginThread()
+extern "C" __attribute__((noinline))  void BeginThread()
 {
-	asm volatile("MOV %RBP, %RSP; SUB $0x10, %RSP; MOV %RSP, %RAX; PUSH $0x23; PUSH %RAX; PUSHF; PUSH $0x1B; PUSH $1f; IRETQ; 1:");
-	//Serial.WriteString(0x1, "\r\nStarting Process: ");
-	//Serial.WriteString(0x1, CurrentThread->OwnerProcess->ProcessName);
+	Serial.WriteString(0x1, "\r\nStarting Process: ");
+	Serial.WriteString(0x1, CurrentThread->OwnerProcess->ProcessName);
 	return;
 }
 

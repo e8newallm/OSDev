@@ -94,7 +94,7 @@ void PICMapping_Init(char PICMOff, char PICSOff)
 extern "C" void KeyboardInterrupt()
 {
 	PushAll();
-	CLI();
+	//CLI();
 	char PressedKey = Input8(0x60);
 	bool Test;
 	if(PressedKey < 0x58)
@@ -106,35 +106,39 @@ extern "C" void KeyboardInterrupt()
 		Kernel_Panic("\r\nKeypress queue full!");
 	}
 	PICEndInt((char)1);
-	STI();
+	//STI();
 	PopAll();
 }
 
 extern "C" void SystemTimerInterrupt()
 {
-	PushAll();
-	CLI();
 	TimeSinceStart += 10;
 	CurrentThreadDuration += 10;
 	CurrentPeriodDuration += 10;
-	short NewDuration = 0x2E9B;
-	Output8(0x40, NewDuration&0xFF); //Set lower byte 0x4E
-	Output8(0x40, NewDuration>>8); //set higher byte 0x17
+	Output8(0x40, 0x9B);
+	Output8(0x40, 0x2E);
 	PICEndInt((char)0);
-	if((!CurrentThreadPeriod && CurrentPeriodDuration >= NormalThreadPeriod) || (CurrentThreadPeriod && CurrentPeriodDuration >= QuickThreadPeriod))
+	if(!CurrentThreadPeriod && CurrentPeriodDuration >= NormalThreadPeriod)
 	{
-		if(!CurrentThreadPeriod)
-			LastNormalThread = CurrentThread;
-		else
-			CurrentThread = LastNormalThread;
+		//Serial.WriteString(0x1, "Moving to fast threads");
+		LastNormalThread = CurrentThread;
+		CurrentThreadPeriod = !CurrentThreadPeriod;
+		CurrentPeriodDuration = 0;
+		SwitchProcesses();
+	}
+	else if(CurrentThreadPeriod && CurrentPeriodDuration >= QuickThreadPeriod)
+	{
+		//Serial.WriteString(0x1, "Moving to normal threads");
+		CurrentThread = LastNormalThread;
 		CurrentThreadPeriod = !CurrentThreadPeriod;
 		CurrentPeriodDuration = 0;
 		SwitchProcesses();
 	}
 	else if(CurrentThreadDuration >= CurrentThread->Duration)
+	{
+		//Serial.WriteString(0x1, "Preemptive swap");
 		SwitchProcesses();
-	STI();
-	PopAll();
+	}
 }
 
 extern "C" void SysCall();
@@ -164,9 +168,28 @@ extern "C" void SysCallSwitch()
 			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
 			break;
 		}
+		
+		case QTHREAD_MAKE_ID: //Create Thread %RAX = QTHREAD_MAKE_ID; %RBX = Main; %RCX = ProcessID; %RDX = Duration; Returns ID = %RAX
+		{
+			int ID = GetProcess(RCX)->QThread_Create((void*)RBX, RDX);
+			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
+			break;
+		}
+		
 		case PAGE_MAP_ID: //Map virtual address %RAX = PAGE_MAP_ID; %RBX = Size; Returns nothing
 		{
 			AddVMemory(RBX);
+			break;
+		}
+		
+		case MAP_VIDEO_MEM_ID: //Map virtual address %RAX = MAP_VIDEO_MEM_ID; %RBX = Starting address; Returns nothing
+		{
+			Serial.WriteString(0x1, "\r\nMapping vid Memory: ");
+			Serial.WriteLongHex(0x1, (GUI.BytesPerLine * GUI.Height));
+			for(unsigned long i = 0; i <= (GUI.BytesPerLine * GUI.Height); i += 0x1000)
+			{
+				CurrentThread->Page->MapAddress(((unsigned long)GUI.FrameAddress + i), (long)RBX + i);
+			}
 			break;
 		}
 	}

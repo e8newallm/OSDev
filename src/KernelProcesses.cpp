@@ -16,38 +16,45 @@ __attribute__((noinline)) int CreateThread(void* Main, int ProcessID)
 	return ThreadID;
 }
 
-/*__attribute__((noinline)) int CreateQThread(void* Main, int ProcessID, int Duration)
+__attribute__((noinline)) int CreateQThread(void* Main, int ProcessID, int Duration)
 {
 
 	long ThreadID = 0;
-	asm volatile("INT $0x51" : "=a"(ThreadID) : "a"(QTHREAD_MAKE_ID), "b"(Main), "c"(ProcessID), );
+	asm volatile("INT $0x51" : "=a"(ThreadID) : "a"(QTHREAD_MAKE_ID), "b"(Main), "c"(ProcessID), "d"(Duration));
 	return ThreadID;
+}
+
+__attribute__((noinline)) void MapVideoMemory(void* Start)
+{
+	asm volatile("INT $0x51" : : "a"(MAP_VIDEO_MEM_ID), "b"(Start));
+}
+
+__attribute__((noinline)) void UpdateWindow(Draw* Data)
+{
+	asm volatile("INT $0x51" : : "a"(UPDATE_WINDOW_ID), "b"(Data));
+}
+
+
+/*__attribute__((noinline)) void YieldCPU()
+{
+	asm("int $0x50");
 }*/
 
-
 /////////////////////////TEST PROGRAMS////////////////////////////////////////////
+///////TODO: COMPILE SEPARATELY AND LOAD USING GRUB MODULES///////////////////////
 
 __attribute__((noinline)) volatile void Graphics()
 {
-	//Serial.WriteString(0x1, "\r\nDone");
-	GUI.FrameAddress = (unsigned char*)((long)(CurrentThread->OwnerProcess)->MemStart);
-	char shade = 255;
-	char* MainFrame = (char*)GUI.FrameAddress;
-	char* NewFrame = (char*)GUI.SecondFrameAddress;
-	//Serial.WriteString(0x1, "\r\nWhile(1)");
+	long* MainFrame = (long*)ProcessMemStart;
+	long* NewFrame = (long*)0xA00000;
+	long Size = (GUI.Height * GUI.BytesPerLine)/8;
+	MapVideoMemory((void*)ProcessMemStart);
 	while(1)
 	{
-		/*for(int i = 0; i < GUI.Height; i++)
-		for(int i = 0; i < GUI.Height; i++)
+		for(long i = 0; i < Size; i++)
 		{
-			for(int j = 0; j < (GUI.Width*GUI.Depth); j++)
-			{
-				int pos = (i * GUI.BytesPerLine) + j;
-				MainFrame[pos] = NewFrame[pos];
-			}
-		}*/
-		for(long i = 0; i < (GUI.Height * GUI.BytesPerLine)/8; i++)
-		((long*)MainFrame)[i] = ((long*)NewFrame)[i];
+			(MainFrame)[i] = (NewFrame)[i];
+		}
 		YieldCPU();
 	}
 }
@@ -66,7 +73,6 @@ __attribute__((noinline)) volatile void SerialWrite()
 __attribute__((noinline)) volatile void TaskManager()
 {
 	Draw Window = Draw(0, 0, GUI.Width/2, GUI.Height*3/4 + 7, GUI.Width, GUI.Height);
-	SerialLog.WriteToLog("Shiet");
 	while(1)
 	{
 		Window.DrawRect(3, 3, (GUI.Width/2) - 6, GUI.Height*3/4 + 4, 255, 255, 255);
@@ -88,21 +94,10 @@ __attribute__((noinline)) volatile void TaskManager()
 	}
 }
 
-/*int QuickThreadPeriod = 600;
-int NormalThreadPeriod = 400;
-bool CurrentThreadPeriod = 0; // 0 = Normal; 1 = Quick
-int CurrentPeriodDuration = 0;
-Thread* LastNormalThread;*/
-
 __attribute__((noinline)) volatile void SystemIdle()
 {
-	SerialLog.WriteToLog("TEST SHIT");
 	while(1)
 	{
 		YieldCPU();
-		SerialLog.WriteToLog("Normal Thread Period");
-		//SerialLog.WriteToLog(NormalThreadPeriod);
-		SerialLog.WriteToLog("Current Period Duration");
-		//SerialLog.WriteToLog(CurrentPeriodDuration);
 	}
 }

@@ -7,7 +7,7 @@
 #define SerialModemStatus 0x6
 #define SerialScratch 0x7
 
-class SerialController
+class SerialController : protected CriticalRegion
 {
 	public:
 	short COM1, COM2, COM3, COM4;
@@ -62,27 +62,32 @@ short SerialController::GetPort(int Port)
 
 bool SerialController::WriteChar(short COMPort, char Character)
 {
+	//Lock();
 	//return true;
 	short Port = GetPort(COMPort);
 	while(PortAvail(Port) == 0);
 	
 	Output8(Port + SerialData, Character);
+	//Unlock();
 	return true;
 }
 
 bool SerialController::WriteString(short COMPort, char* String)
 {
+	//Lock();
 	short Port = GetPort(COMPort);
 	for(int Pos = 0; String[Pos] != (char)0; Pos++)
 	{
 		while(PortAvail(Port) == 0);
 		Output8(Port + SerialData, String[Pos]);
 	}
+	//Unlock();
 	return true;
 }
 
 bool SerialController::WriteLongHex(short COMPort, long Value)
 {
+	//Lock();
 	char Output[16];
 	int Pos = 0;
 	unsigned long Temp = Value;
@@ -108,11 +113,13 @@ bool SerialController::WriteLongHex(short COMPort, long Value)
 		while(PortAvail(Port) == 0);
 		Output8(Port + SerialData, Output[Pos]);
 	}
+	//Unlock();
 	return true;
 }
 
 bool SerialController::WriteLong(short COMPort, long Value)
 {
+	//Lock();
 	char Output[10];
 	int Pos = 0;
 	unsigned long Temp = Value;
@@ -134,6 +141,7 @@ bool SerialController::WriteLong(short COMPort, long Value)
 		while(PortAvail(Port) == 0);
 		Output8(Port + SerialData, Output[Pos]);
 	}
+	//Unlock();
 	return true;
 }
 
