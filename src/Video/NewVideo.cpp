@@ -19,7 +19,7 @@ public:
 	void Update();
 	Draw(unsigned short, unsigned short, unsigned short, unsigned short, unsigned short, unsigned short);
 	Draw();
-	void DrawCharacter(char, long, long);
+	void DrawCharacter(unsigned char, long, long);
 	void DrawString(char*, int, long, long);
 	void DrawString(const char*, int, long, long);
 	void DrawString(char*, long, long);
@@ -88,12 +88,12 @@ Draw::Draw()
 {}
 
 
-void Draw::DrawCharacter(char Character, long x, long y)
+void Draw::DrawCharacter(unsigned char Character, long x, long y)
 {
-	for(long i = 0; i < 8; i++)
+	for(unsigned long i = 0; i < 8; i++)
 	{
-		char Line = Font[Character][i];
-		for(long j = 0; j < 8; j++)
+		unsigned char Line = Font[Character][i];
+		for(unsigned long j = 0; j < 8; j++)
 		{
 			if(Line & (1 << (7 - j)))
 			{

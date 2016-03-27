@@ -35,7 +35,7 @@ char* LongToString(long Number) //Convert Decimal number into string
 		Number = -Number;
 		Size++;
 	}
-	char *Return = (char*)malloc(Size+1);
+	char *Return = (char*)Malloc(Size+1);
 	Return[Size] = (char)0;
 	Return[Size-1] = '0';
 	for(long i = Size-1; Number != 0 ; i--)
@@ -50,7 +50,7 @@ char* LongToString(long Number) //Convert Decimal number into string
 char* ULongToString(unsigned long Number) //Convert Decimal number into string
 {
 	long Size = LongDigits(Number);
-	char* Return = (char*)malloc(Size+1);
+	char* Return = (char*)Malloc(Size+1);
 	for(long i = 0; i <= Size; i++)
 	{
 		Return[i] = '0';
@@ -68,7 +68,7 @@ char* LongToStringHex(long Number) //Convert Hexadecimal number into string
 {
 	long Size = LongDigitsHex(Number) + 2;
 	bool Neg = Number < 0;
-	char *Return = (char*)malloc(Size+1);
+	char *Return = (char*)Malloc(Size+1);
 	if(Neg)
 	{
 		Number = -Number;
@@ -90,14 +90,14 @@ char* LongToStringHex(long Number) //Convert Hexadecimal number into string
 		Return[i] = Hex[(Number % 16)];
 		Number /= 16;
 	}
-	if(Neg) ;
+	if(Neg){};
 	return Return;
 }
 
 char* ULongToStringHex(unsigned long Number) //Convert Hexadecimal number into string
 {
 	long Size = LongDigitsHex(Number) + 2;
-	char *Return = (char*)malloc(Size+1);
+	char *Return = (char*)Malloc(Size+1);
 	Return[Size] = (char)0;
 	Return[Size-1] = '0';
 	long i;
@@ -165,17 +165,17 @@ long UCharDigitsHex(unsigned char Number) //Calculate amount of Hexadecimal digi
 
 char* CharToString(char Number) //Convert Decimal number into string
 {
-	char Size = CharDigits(Number);
+	unsigned char Size = CharDigits(Number);
 	bool Neg = Number < 0;
 	if(Neg)
 	{
 		Number = -Number;
 		Size++;
 	}
-	char *Return = (char*)malloc(Size+1);
+	char *Return = (char*)Malloc(Size+1);
 	Return[Size] = (char)0;
 	Return[Size-1] = '0';
-	for(char i = Size-1; Number != 0 ; i--)
+	for(unsigned char i = Size-1; Number != 0 ; i--)
 	{
 		Return[i] = (Number % 10) + '0';
 		Number /= 10;
@@ -186,14 +186,14 @@ char* CharToString(char Number) //Convert Decimal number into string
 
 char* UCharToString(unsigned char Number) //Convert Decimal number into string
 {
-	char Size = UCharDigits(Number);
-	char *Return = (char*)malloc(Size+1);
-	for(char i = Size-1; i >= 0; i--)
+	unsigned char Size = UCharDigits(Number);
+	char *Return = (char*)Malloc(Size+1);
+	for(unsigned char i = 0; i < Size; i++)
 	{
 		Return[i] = '0';
 	}
 	Return[Size] = (char)0;
-	for(char i = Size-1; Number != 0 ; i--)
+	for(unsigned char i = Size-1; Number != 0 ; i--)
 	{
 		Return[i] = (Number % 10) + '0';
 		Number /= 10;
@@ -203,17 +203,17 @@ char* UCharToString(unsigned char Number) //Convert Decimal number into string
 
 char* CharToStringHex(char Number) //Convert Hexadecimal number into string
 {
-	char Size = CharDigitsHex(Number) + 2;
+	unsigned char Size = CharDigitsHex(Number) + 2;
 	bool Neg = Number < 0;
 	if(Neg)
 	{
 		Number = -Number;
 		Size++;
 	}
-	char *Return = (char*)malloc(Size+1);
+	char *Return = (char*)Malloc(Size+1);
 	Return[Size] = (char)0;
 	Return[Size-1] = '0';
-	char i;
+	unsigned char i;
 	for(i = Size-1; Number != 0 ; i--)
 	{
 		Return[i] = Hex[(Number % 16)];
@@ -227,12 +227,11 @@ char* CharToStringHex(char Number) //Convert Hexadecimal number into string
 
 char* UCharToStringHex(unsigned char Number) //Convert Hexadecimal number into string
 {
-	char Size = UCharDigitsHex(Number) + 2;
-	char *Return = (char*)malloc(Size+1);
+	unsigned char Size = UCharDigitsHex(Number) + 2;
+	char *Return = (char*)Malloc(Size+1);
 	Return[Size] = (char)0;
 	Return[Size-1] = '0';
-	char i;
-	for(i = Size-1; Number != 0 ; i--)
+	for(unsigned char i = Size-1; Number != 0 ; i--)
 	{
 		Return[i] = Hex[(Number % 16)];
 		Number /= 16;

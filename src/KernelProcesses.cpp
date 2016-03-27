@@ -24,6 +24,22 @@ __attribute__((noinline)) int CreateQThread(void* Main, int ProcessID, int Durat
 	return ThreadID;
 }
 
+__attribute__((noinline)) int CreateThread(void* Main)
+{
+
+	long ThreadID = 0;
+	asm volatile("INT $0x51" : "=a"(ThreadID) : "a"(THREAD_MAKE_ID_SELF), "b"(Main));
+	return ThreadID;
+}
+
+__attribute__((noinline)) int CreateQThread(void* Main, int Duration)
+{
+
+	long ThreadID = 0;
+	asm volatile("INT $0x51" : "=a"(ThreadID) : "a"(QTHREAD_MAKE_ID_SELF), "b"(Main), "d"(Duration));
+	return ThreadID;
+}
+
 __attribute__((noinline)) void MapVideoMemory(void* Start)
 {
 	asm volatile("INT $0x51" : : "a"(MAP_VIDEO_MEM_ID), "b"(Start));
@@ -34,16 +50,10 @@ __attribute__((noinline)) void UpdateWindow(Draw* Data)
 	asm volatile("INT $0x51" : : "a"(UPDATE_WINDOW_ID), "b"(Data));
 }
 
-
-/*__attribute__((noinline)) void YieldCPU()
-{
-	asm("int $0x50");
-}*/
-
 /////////////////////////TEST PROGRAMS////////////////////////////////////////////
 ///////TODO: COMPILE SEPARATELY AND LOAD USING GRUB MODULES///////////////////////
 
-__attribute__((noinline)) volatile void Graphics()
+__attribute__((noinline)) void Graphics()
 {
 	long* MainFrame = (long*)ProcessMemStart;
 	long* NewFrame = (long*)0xA00000;
@@ -59,7 +69,7 @@ __attribute__((noinline)) volatile void Graphics()
 	}
 }
 
-__attribute__((noinline)) volatile void SerialWrite()
+__attribute__((noinline)) void SerialWrite()
 {
 	char NextLog[256];
 	while(1)
@@ -70,7 +80,7 @@ __attribute__((noinline)) volatile void SerialWrite()
 	}
 }
 
-__attribute__((noinline)) volatile void TaskManager()
+__attribute__((noinline)) void TaskManager()
 {
 	Draw Window = Draw(0, 0, GUI.Width/2, GUI.Height*3/4 + 7, GUI.Width, GUI.Height);
 	while(1)
@@ -83,19 +93,67 @@ __attribute__((noinline)) volatile void TaskManager()
 		Process* CurProcess = GetProcess(0);
 		while(CurProcess->Available == false)
 		{
-			int CurThreadID = 0;
 			Window.DrawString(CurProcess->ProcessName, 19, y);
 			y += 15;
 			CurProcessID++;
 			CurProcess = GetProcess(CurProcessID);
 		}
+		y+= 15;
+		Window.DrawString("Time: ", 10, y);
+		char* Temp = LongToString(TimeSinceStart);
+		Window.DrawString(Temp, 64, y);
+		Free(Temp);
 		Window.Update();
+		//SerialLog.WriteToLog("DRAWING COMPLETE");
 		YieldCPU();
 	}
 }
 
-__attribute__((noinline)) volatile void SystemIdle()
+volatile long Result = 0;
+volatile long Result2 = 0;
+
+__attribute__((noinline)) void TestShit()
 {
+	long Temp = 0;
+	SerialLog.WriteToLog("Test shit is running yo");
+	for(int i = 0; i < 200000; i++)
+	{
+		Temp += i;
+	}
+	Result = Temp;
+	return;
+}
+
+__attribute__((noinline)) void TestShitTwo()
+{
+	long Temp = 0;
+	SerialLog.WriteToLog("Test shit is running yo");
+	for(int i = 0; i < 400000; i++)
+	{
+		Temp += i;
+	}
+	Result2 = Temp;
+	return;
+}
+
+__attribute__((noinline)) void SystemIdle()
+{
+	GetProcess(0)->StartThread(CreateQThread((void*)&TestShit, 500));
+	GetProcess(0)->StartThread(CreateQThread((void*)&TestShitTwo, 600));
+	while(Result == 0)
+	{
+		SerialLog.WriteToLog("\r\nResult Pending");
+		YieldCPU();
+	}
+	SerialLog.WriteToLog("\r\nThe result is ");
+	SerialLog.WriteToLog(LongToString(Result));
+	while(Result2 == 0)
+	{
+		SerialLog.WriteToLog("\r\nResult2 Pending");
+		YieldCPU();
+	}
+	SerialLog.WriteToLog("\r\nThe result2 is ");
+	SerialLog.WriteToLog(LongToString(Result2));
 	while(1)
 	{
 		YieldCPU();

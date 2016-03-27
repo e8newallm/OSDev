@@ -1,38 +1,3 @@
-struct MemorySeg
-{
-	unsigned long BaseAddress;
-	unsigned char Usage;
-	// Usage = 00 : Free
-	// Usage = 01 : In use
-	// Usage = 02 : Locked
-	// Usage = 03 : Needs zeroing to prepare for usage
-	// Usage = FF : End of Map
-};
-
-const char MEMORYSEG_FREE = 0x00;
-const char MEMORYSEG_INUSE = 0x01;
-const char MEMORYSEG_LOCKED = 0x02;
-const char MEMORYSEG_ZERO = 0x03;
-const char MEMORYSEG_EOM = 0xFF;
-
-class MemoryMap
-{
-	public:
-	unsigned long MemorySegSize;
-	MemorySeg* PhyMemMap;
-	unsigned long Size;
-	
-	MemorySeg* FindPhyAddr(void*);
-	MemorySeg* FindFreePhyAddr();
-	int UsePhyAddr(MemorySeg*, char);
-	void* UseFreePhyAddr(char);
-	int FreePhyAddr(MemorySeg*);
-	void Initialise(multiboot_info_t*, MemorySeg*, long);
-	long AddrToPos(void*);
-	MemorySeg* operator[](unsigned long);
-	MemorySeg* EOM();
-};
-
 MemorySeg* MemoryMap::operator[](unsigned long Position)
 {
 	if(Position > Size)
@@ -45,18 +10,18 @@ MemorySeg* MemoryMap::EOM()
 	return (PhyMemMap+Size);
 }
 
-void MemoryMap::Initialise(multiboot_info_t* mbd, MemorySeg* Start, long MemSegLength)
+void MemoryMap::Initialise(multiboot_info_t* mbd, MemorySeg* Start, unsigned long MemSegLength)
 {
 	memory_map_t* mmap = (memory_map*)((long)mbd->mmap_addr);
-	long MemoryAddr = 0x0;
+	unsigned long MemoryAddr = 0x0;
 	PhyMemMap = Start;
 	MemorySegSize = MemSegLength;
 	MemorySeg* CurrentMap = PhyMemMap;
 	
 	while((long)mmap < (long)mbd->mmap_addr + (long)mbd->mmap_length)
 	{
-		long BaseAddr = (((long)mmap->base_addr_high) << 32) + (long)mmap->base_addr_low;
-		long Length = (((long)mmap->length_high) << 32) + (long)mmap->length_low;
+		unsigned long BaseAddr = (((unsigned long)mmap->base_addr_high) << 32) + (unsigned long)mmap->base_addr_low;
+		unsigned long Length = (((unsigned long)mmap->length_high) << 32) + (unsigned long)mmap->length_low;
 		if(MemoryAddr < BaseAddr)
 		{
 			MemoryAddr = BaseAddr;
@@ -95,9 +60,9 @@ void MemoryMap::Initialise(multiboot_info_t* mbd, MemorySeg* Start, long MemSegL
 	}
 }
 
-long MemoryMap::AddrToPos(void* Address)
+unsigned long MemoryMap::AddrToPos(void* Address)
 {
-	return (long)(((long)Address - ((long)Address % MemorySegSize))/MemorySegSize);
+	return (unsigned long)(((unsigned long)Address - ((unsigned long)Address % MemorySegSize))/MemorySegSize);
 }
 
 MemorySeg* MemoryMap::FindPhyAddr(void* MemoryAddr)
@@ -164,5 +129,3 @@ int MemoryMap::FreePhyAddr(MemorySeg* MemoryAddr)
 	}
 	return 0x00; //Return 0 on success
 }
-
-MemoryMap PhysMemory;

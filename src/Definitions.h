@@ -3,9 +3,11 @@
 #define PROCESS_MAKE_ID 0
 #define THREAD_MAKE_ID 1
 #define QTHREAD_MAKE_ID 2
-#define PAGE_MAP_ID 3
-#define MAP_VIDEO_MEM_ID 4
-#define UPDATE_WINDOW_ID 5
+#define THREAD_MAKE_ID_SELF 3
+#define QTHREAD_MAKE_ID_SELF 4
+#define PAGE_MAP_ID 5
+#define MAP_VIDEO_MEM_ID 6
+#define UPDATE_WINDOW_ID 7
 
 #define CLI() __asm__("CLI");
 #define STI() __asm__("STI");

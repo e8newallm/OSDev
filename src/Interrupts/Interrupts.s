@@ -143,7 +143,6 @@ Exc1E:
 	
 SysCall:
 	PUSH %RBP
-	PUSH %RAX
 	PUSH %RCX
 	PUSH %RBX
 	PUSH %RDX
@@ -173,7 +172,6 @@ SysCall:
 	POP %RDX
 	POP %RBX
 	POP %RCX
-	POP %RAX
 	POP %RBP
 	IRETQ
 

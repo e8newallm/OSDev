@@ -7,7 +7,7 @@
 #define SerialModemStatus 0x6
 #define SerialScratch 0x7
 
-class SerialController : protected CriticalRegion
+class SerialController// : protected Mutex
 {
 	public:
 	short COM1, COM2, COM3, COM4;
@@ -64,7 +64,7 @@ bool SerialController::WriteChar(short COMPort, char Character)
 {
 	//Lock();
 	//return true;
-	short Port = GetPort(COMPort);
+	unsigned short Port = GetPort(COMPort);
 	while(PortAvail(Port) == 0);
 	
 	Output8(Port + SerialData, Character);
@@ -75,7 +75,7 @@ bool SerialController::WriteChar(short COMPort, char Character)
 bool SerialController::WriteString(short COMPort, char* String)
 {
 	//Lock();
-	short Port = GetPort(COMPort);
+	unsigned short Port = GetPort(COMPort);
 	for(int Pos = 0; String[Pos] != (char)0; Pos++)
 	{
 		while(PortAvail(Port) == 0);
@@ -155,22 +155,33 @@ SerialController Serial;
 void YieldCPU();
 #define SerialQueueSize 30
 
-class SerialQueue : protected CriticalRegion
+class SerialQueue : protected Mutex
 {
 	private:
 	volatile char Queue[SerialQueueSize][256];
-	char Position = 0;
+	unsigned int Head = 0, Tail = 0;
+	bool SameCycle = true;
 	public:
+	SerialQueue();
 	void WriteToLog(char*);
 	void WriteToLog(const char*);
 	void WriteToLog(long);
 	void ReadFromLog(char*);
 };
 
+SerialQueue SerialLog;
+
+SerialQueue::SerialQueue()
+{
+	SameCycle = true;
+	Head = 0;
+	Tail = 0;
+}
+
 void SerialQueue::WriteToLog(char* String)
 {
 	Lock();
-	while(Position >= SerialQueueSize)
+	while(Head == Tail && !SameCycle)
 	{
 		Unlock();
 		YieldCPU();
@@ -178,40 +189,26 @@ void SerialQueue::WriteToLog(char* String)
 	}
 	int i;
 	for(i = 0; i < 256 && String[i] != (char)0; i++)
-		Queue[Position][i] = String[i];
-	Queue[Position][i] = (char)0;
-	Position++;
+	{
+		Queue[Head][i] = String[i];
+		//Serial.WriteString(0x1, "\r\n\tQueue[Head][i]: ");
+		//Serial.WriteLongHex(0x1, Queue[Head][i]);
+	}
+	Queue[Head][i] = (char)0;
+	Head++;
+	if(Head == SerialQueueSize)
+	{
+		Head = 0;
+		SameCycle = false;
+	}
 	Unlock();
 }
 
+extern char* LongToString(long);
+
 void SerialQueue::WriteToLog(long Value)
 {
-	Lock();
-	while(Position >= SerialQueueSize)
-	{
-		Unlock();
-		YieldCPU();
-		Lock();
-	}
-	int Pos = 2;
-	Queue[Position][0] = '0';
-	Queue[Position][1] = 'x';
-	int bits = 60;
-	bool HighDigit = false;
-	while(bits >= 0)
-	{
-		char Digit = (Value>>bits)&0xF;
-		if(HighDigit == true || Digit != 0 || bits == 0)
-		{
-			Queue[Position][Pos] = Hex[Digit];
-			Pos++;
-			HighDigit = true;
-		}
-		bits -= 4;
-	}
-	Queue[Position][Pos] = (char)0;
-	Position++;
-	Unlock();
+	WriteToLog(LongToString(Value));
 }
 
 void SerialQueue::WriteToLog(const char* String)
@@ -222,20 +219,28 @@ void SerialQueue::WriteToLog(const char* String)
 void SerialQueue::ReadFromLog(char* Destination)
 {
 	Lock();
-	while(Position == 0)
+	while(Head == Tail && SameCycle)
 	{
 		Unlock();
 		YieldCPU();
 		Lock();
 	}
-	Position--;
 	int i;
-	for(i = 0; i < 256 && Queue[Position][i] != (char)0; i++)
+	for(i = 0; i < 256 && Queue[Tail][i] != (char)0; i++)
 	{
-		Destination[i] = Queue[Position][i];
+		Destination[i] = Queue[Tail][i];
 	}
-	Destination[i] = Queue[Position][i];
+	Destination[i] = Queue[Tail][i];
+	Tail++;
+	if(Tail == SerialQueueSize)
+	{
+		Tail = 0;
+		SameCycle = true;
+	}
 	Unlock();
 }
 
-SerialQueue SerialLog;
+void WriteToLog(char* String)
+{
+	SerialLog.WriteToLog(String);
+}

@@ -1,81 +1,3 @@
-extern "C" void SwitchProcesses();
-extern "C" void InitThread();
-extern tss_entry TSS;
-
-extern "C" void SwitchASM(long** OldRSP, long** NewRSP, long* NewCR3);
-extern "C" void StartASM(long* NewRSP, long* NewCR3);
-
-void* Malloc(unsigned long);
-void ReturnThread();
-extern "C" void BeginThread();
-
-struct MBlockHeader 
-{
-	unsigned char PrevUsage;
-	long PrevSize;
-	long NextSize;
-	unsigned char NextUsage;
-} __attribute__((packed));
-
-
-
-class Process;
-
-class Thread
-{
-	public:
-	char Type; //0 = Normal; 1 = Quick
-	long Test = 0xDEADBEEF;
-	bool Available;
-	long* TSSRSP;
-	long* TSSRBP;
-	int ThreadID;
-	long Duration, MaxDuration;
-	PageFile* Page;
-	Process* OwnerProcess;
-	Thread* NextThread;
-	bool Killed;
-	Thread(void*, Process*, PageFile*, long);
-	Thread(void*, Process*, PageFile*, long, int);
-	Thread();
-	void Start();
-	void Kill();
-};
-
-class Process
-{
-public:
-	long Test = 0xDEADBEEF;
-	bool Available;
-	PageFile Page;
-	void* MemStart;
-	MBlockHeader* StartBlock;
-	MBlockHeader* EndBlock;
-	bool Killed;
-	Process();
-	Process(void*, const char*);
-	int Thread_Create(void*);
-	int QThread_Create(void*, int);
-	void Start();
-	void Kill();
-	void StartThread(int);
-	Thread ThreadList[256];
-	char ProcessName[256];
-	Thread* GetThread(int);
-};
-
-Thread* CurrentThread;
-int CurrentThreadDuration;
-
-//Shortest remaining time
-volatile long QuickThreadPeriod = 600;
-volatile long NormalThreadPeriod = 400;
-volatile bool CurrentThreadPeriod = 0; // 0 = Normal; 1 = Quick
-volatile long CurrentPeriodDuration = 123;
-Thread* LastNormalThread;
-
-Process ProcessList[256];
-
 __attribute__((noinline)) Process* GetProcess(int ID)
 {
 	return &(ProcessList[ID]);
@@ -98,18 +20,20 @@ int Process_Make(void* Main, const char* Name)
 	{
 		if(ProcessList[i].Available)
 		{
-			new (ProcessList+i) Process(Main, Name);
+			new (ProcessList+i) Process(Main, Name, (unsigned char)i);
 			return i;
 		}
 	}
 	Kernel_Panic("OH SHIT NO PROCESSES LEFT");
+	return -1; // Stops pedantic warning
 }
 
 /////////////////////////PROCESS CODE///////////////////////////////////////
 
-Process::Process(void* Main, const char* Name)
+Process::Process(void* Main, const char* Name, unsigned char i)
 {
 	Available = false;
+	ProcessID = i;
 	ProcessName[255] = (char)0;
 	for(int i = 0; i <= 254; i++)
 	{
@@ -158,41 +82,43 @@ extern "C" void SwitchProcesses() //SHORTEST REMAINING TIME
 				for(unsigned short j = 0; j < 256; j++)
 				{
 					Thread* CurThread = CurProcess->GetThread(j);
-					if(!CurThread->Available && CurThread->Type && (Next == (Thread*)0 || CurThread->MaxDuration < Next->MaxDuration))
+					if(!CurThread->State == THREADSTATE_AVAILABLE && CurThread->Type && (Next == (Thread*)0 || CurThread->MaxDuration < Next->MaxDuration))
 						Next = CurThread;
 				}
 			}
 		}
 		if(Next == (Thread*)0) //No quickthreads
 		{
-			//Serial.WriteString(0x1, "\tNo quickthreads");
-			CurrentThread = LastNormalThread;
+			//Serial.WriteString(0x1, "\r\nNo quickthreads");
 			CurrentThreadPeriod = !CurrentThreadPeriod;
-			Next = CurrentThread->NextThread;
-			while(Next->Killed)
+			Next = RoundRobinThread->NextThread;
+			while(Next->State != THREADSTATE_RUNNING)
 			{
-				Next->Available = true;
 				Next = Next->NextThread;
-				CurrentThread->NextThread = Next;
+				RoundRobinThread->NextThread = Next;
 			}
+			RoundRobinThread = Next;
+		}
+		else
+		{
+			//Serial.WriteString(0x1, "\r\nQuickthread found");
 		}
 	}
 	else
 	{
-		//Serial.WriteString(0x1, "\r\nNormalthread time"); // BREAKS ON PIT SWAP
-		Next = CurrentThread->NextThread;
-		while(Next->Killed)
+		//Serial.WriteString(0x1, "\r\nNormalthread time");
+		Next = RoundRobinThread->NextThread;
+		while(Next->State != THREADSTATE_RUNNING)
 		{
-			Next->Available = true;
 			Next = Next->NextThread;
-			CurrentThread->NextThread = Next;
+			RoundRobinThread->NextThread = Next;
 		}
+		RoundRobinThread = Next;
 	}
-	
 	long** NextRSP = &(Next->TSSRSP);
 	long* NextPage = (Next->Page)->Pages;
 	long** CurrentRSP = &(CurrentThread->TSSRSP);
-	CurrentThread = CurrentThread->NextThread;
+	CurrentThread = Next;
 	TSS.RSP0 = (unsigned long)CurrentThread->TSSRBP;
 	SwitchASM(CurrentRSP, NextRSP, NextPage);
 }
@@ -229,14 +155,16 @@ void Process::Kill()
 
 int Process::Thread_Create(void* Main)
 {
+	CLI();
 	for(long i = 0; i < 256; i++)
 	{
-		if(ThreadList[i].Available)
+		if(ThreadList[i].State == THREADSTATE_AVAILABLE)
 		{
 			new (ThreadList+i) Thread(Main, this, &Page, i);
 			return i;
 		}
 	}
+	STI();
 	return -1;
 }
 
@@ -244,7 +172,7 @@ int Process::QThread_Create(void* Main, int Duration)
 {
 	for(long i = 0; i < 256; i++)
 	{
-		if(ThreadList[i].Available)
+		if(ThreadList[i].State == THREADSTATE_AVAILABLE)
 		{
 			new (ThreadList+i) Thread(Main, this, &Page, i, Duration);
 			return i;
@@ -255,12 +183,12 @@ int Process::QThread_Create(void* Main, int Duration)
 
 Thread::Thread(void* Main, Process* OwnerProcessIn, PageFile* PageIn, long IDThread)
 {
-	Type = 0;
-	Available = false;
+	Type = 0; //NORMAL THREAD
+	State = THREADSTATE_READY;
 	ThreadID = IDThread;
 	OwnerProcess = OwnerProcessIn;
 	Page = PageIn;
-	MaxDuration = 200;
+	MaxDuration = 20000;
 	char* Stack = (char*)((StackSpaceStart + (IDThread * StackSize)));
 	long Temp = (long)PhysMemory.UseFreePhyAddr();
 	Page->MapAddress(Temp, (unsigned long)((Stack + TSSOffset - 1)));
@@ -276,13 +204,12 @@ Thread::Thread(void* Main, Process* OwnerProcessIn, PageFile* PageIn, long IDThr
 	StackSetup[0] = (long)Main; //End thread address
 	StackSetup[1] = (long)&ReturnThread; //End thread address
 	Page = &(OwnerProcess->Page);
-	Killed = false;
 }
 
 Thread::Thread(void* Main, Process* OwnerProcessIn, PageFile* PageIn, long IDThread, int DurationIn)
 {
-	Type = 1;
-	Available = false;
+	Type = 1; //QTHREAD
+	State = THREADSTATE_READY;
 	ThreadID = IDThread;
 	OwnerProcess = OwnerProcessIn;
 	Page = PageIn;
@@ -302,31 +229,40 @@ Thread::Thread(void* Main, Process* OwnerProcessIn, PageFile* PageIn, long IDThr
 	StackSetup[0] = (long)Main; //End thread address
 	StackSetup[1] = (long)&ReturnThread; //End thread address
 	Page = &(OwnerProcess->Page);
-	Killed = false;
 }
 
 
 void Thread::Start()
 {
-	NextThread = CurrentThread->NextThread;
-	CurrentThread->NextThread = this;
+	State = THREADSTATE_RUNNING;
+	if(Type == 0)
+	{
+		NextThread = RoundRobinThread->NextThread;
+		RoundRobinThread->NextThread = this;
+	}
 }
 
 Thread::Thread()
 {
-	Available = true;
+	State = THREADSTATE_AVAILABLE;
 }
 
 void Thread::Kill()
 {
-	Killed = true;
+	State = THREADSTATE_AVAILABLE;
+	//TODO: Add freeing of memory and closing of process if the current active one
+}
+
+void Thread::Block()
+{
+	State = THREADSTATE_BLOCKED;
 	//TODO: Add freeing of memory and closing of process if the current active one
 }
 
 extern "C" __attribute__((noinline))  void BeginThread()
 {
-	Serial.WriteString(0x1, "\r\nStarting Process: ");
-	Serial.WriteString(0x1, CurrentThread->OwnerProcess->ProcessName);
+	SerialLog.WriteToLog("\r\nStarting Process: ");
+	SerialLog.WriteToLog(CurrentThread->OwnerProcess->ProcessName);
 	return;
 }
 
@@ -342,20 +278,71 @@ __attribute__((noinline)) void ReturnThread()
 
 void Mutex::Lock()
 {
-	while(!__sync_bool_compare_and_swap(&InUse, false, true))
+	while(!__sync_bool_compare_and_swap(&Editing, false, true))
 	{
 		YieldCPU();
 	}
-	CurrentThreadID = CurrentThread->ThreadID;
+	//Serial.WriteString(0x1, "\r\nEditing = true");
+	//Serial.WriteString(0x1, "\r\nLOCKING");
+	if(!__sync_bool_compare_and_swap(&InUse, false, true))
+	{
+		//Serial.WriteString(0x1, "\r\nIN USE BLOCKING THREAD FROM PROCESS ");
+		//Serial.WriteString(0x1, CurrentThread->OwnerProcess->ProcessName);
+		Thread* Test = __sync_val_compare_and_swap(&QueueStart, 0, CurrentThread);
+		if(Test == 0)
+		{
+			QueueEnd = CurrentThread;
+			CurrentThread->NextThreadMutex = 0;
+			//Serial.WriteString(0x1, "\r\nFIRST IN QUEUE");
+		}
+		else
+		{
+			QueueEnd->NextThreadMutex = CurrentThread;
+			QueueEnd = CurrentThread;
+			CurrentThread->NextThreadMutex = 0;
+			//Serial.WriteString(0x1, "\r\nNOT FIRST IN QUEUE");
+		}
+		CurrentThread->Block();
+		//Serial.WriteString(0x1, "\r\nEditing = false");
+		Editing = false;
+		YieldCPU();
+	}
+	else
+	{
+		//Serial.WriteLongHex(0x1, CurrentThread->State);
+		//Serial.WriteString(0x1, "\r\nEditing = false");
+		Editing = false;
+	}
+	CurrentThreadMutex = CurrentThread;
 }
 
 void Mutex::Unlock()
 {
-	if(CurrentThreadID == CurrentThread->ThreadID)
+	//Serial.WriteString(0x1, "\r\nUNLOCKING");
+	while(!__sync_bool_compare_and_swap(&Editing, false, true))
 	{
-		CurrentThreadID = 0;
-		InUse = false;
+		YieldCPU();
 	}
+	//Serial.WriteString(0x1, "\r\nEditing = true");
+	if(CurrentThreadMutex == CurrentThread)
+	{
+		if(QueueStart != 0)
+		{
+			//Serial.WriteString(0x1, "\r\nSWAPPING CONTROL TO NEXT IN QUEUE: ");
+			//Serial.WriteString(0x1, CurrentThreadMutex->OwnerProcess->ProcessName);
+			CurrentThreadMutex = QueueStart;
+			QueueStart = QueueStart->NextThreadMutex;
+			CurrentThreadMutex->Start();
+		}
+		else
+		{
+			CurrentThreadMutex = 0;
+			InUse = false;
+			//Serial.WriteString(0x1, "\r\nNOTHING TO SWAP TO");
+		}
+	}
+	//Serial.WriteString(0x1, "\r\nEditing = false");
+	Editing = false;
 }
 
 void YieldCPU()
@@ -363,12 +350,40 @@ void YieldCPU()
 	asm("int $0x50");
 }
 
-void CriticalRegion::Lock()
+template <typename ListType, unsigned int S> ListType FIFOList<ListType, S>::Read()
 {
-	RegionMutex.Lock();
+	if(Head == Tail)
+	
+	ListType ReturnValue = List[Tail];
+	Tail++;
+	if(Tail > S)
+	{
+		Tail = 0;
+		SameCycle = true;
+	}
 }
 
-void CriticalRegion::Unlock()
+template <typename ListType, unsigned int S> void FIFOList<ListType, S>::Write(ListType Message)
 {
-	RegionMutex.Unlock();
+	List[Head] = Message;
+	Head++;
+	if(Head > S)
+	{
+		Head = 0;
+		SameCycle = false;
+	}
+}
+
+template <typename ListType, unsigned int S> bool FIFOList<ListType, S>::Writable()
+{
+	if(Head != Tail && SameCycle)
+		return false;
+	return true;
+}
+
+template <typename ListType, unsigned int S> bool FIFOList<ListType, S>::Readable()
+{
+	if(Head != Tail && !SameCycle)
+		return false;
+	return true;
 }

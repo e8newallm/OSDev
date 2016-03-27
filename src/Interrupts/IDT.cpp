@@ -1,53 +1,3 @@
-#define PICM_Com 0x20
-#define PICM_Dat 0x21
-#define PICS_Com 0xA0
-#define PICS_Dat 0xA1
-
-#define PIC_EOI 0x20
-
-inline void PushAll()
-{
-	asm("PUSH %RAX; PUSH %RCX; PUSH %RBP; PUSH %RBX; PUSH %RSI; PUSH %RDI; PUSH %RBP; PUSH %R8; PUSH %R9; PUSH %R10; PUSH %R11; PUSH %R12; PUSH %R13; PUSH %R14; PUSH %R15; PUSHF");
-}
-
-inline void PopAll()
-{
-	asm("POPF; POP %R15; POP %R14; POP %R13; POP %R12; POP %R11; POP %R10; POP %R9; POP %R8; POP %RBP; POP %RDI; POP %RSI; POP %RBX; POP %RBP; POP %RCX; POP %RAX");
-}
-
-struct __attribute__ ((packed)) IDTDescr
-{
-   short Offset1;
-   short Selector;
-   char Zero;
-   char TypeAttr; 
-   short Offset2;
-   int Offset3;	
-   int Zero2;
-};
-
-struct IDTPtr
-{
-    unsigned short Limit;
-    long* Base;
-} __attribute__((packed));
-
-
-struct __attribute__((packed)) IDTStruct
-{
-	IDTDescr Entries[0xFF];
-	IDTPtr Pointer;
-};
-
-long extern KeyboardInt, SystemTimerInt, ProcessSwitchInt;
-
-long extern Exc0, Exc1, Exc2, Exc3, Exc4, Exc5,
-			Exc6, Exc7, Exc8, ExcA, ExcB, ExcC,
-			ExcD, ExcE, Exc10, Exc11, Exc12,
-			Exc13, Exc14, Exc1E;
-IDTStruct* IDT;
-long* Pointer;
-
 void PICEndInt(char IRQ)
 {
 	if(IRQ >= 8)
@@ -57,12 +7,7 @@ void PICEndInt(char IRQ)
 	Output8(PICM_Com, PIC_EOI);
 }
 
-inline void Int22()
-{
-	__asm__("int $0x22\r\n");
-}
-
-void SetGate(char GateAddr, long* Offset, char Type)
+void SetGate(unsigned char GateAddr, long* Offset, unsigned char Type)
 {
 	IDT->Entries[GateAddr].Selector = 0x8;
 	IDT->Entries[GateAddr].TypeAttr = Type;
@@ -95,15 +40,10 @@ extern "C" void KeyboardInterrupt()
 {
 	PushAll();
 	//CLI();
-	char PressedKey = Input8(0x60);
-	bool Test;
+	unsigned char PressedKey = Input8(0x60);
 	if(PressedKey < 0x58)
 	{
-		Test = PutKeyPress(ScanCodes1[PressedKey]);
-	}
-	if(!Test)
-	{
-		Kernel_Panic("\r\nKeypress queue full!");
+		PutKeyPress(ScanCodes1[PressedKey]);
 	}
 	PICEndInt((char)1);
 	//STI();
@@ -120,23 +60,22 @@ extern "C" void SystemTimerInterrupt()
 	PICEndInt((char)0);
 	if(!CurrentThreadPeriod && CurrentPeriodDuration >= NormalThreadPeriod)
 	{
-		//Serial.WriteString(0x1, "Moving to fast threads");
-		LastNormalThread = CurrentThread;
+		Serial.WriteString(0x1, "\r\n\r\nMoving to fast threads");
+		RoundRobinThread = CurrentThread;
 		CurrentThreadPeriod = !CurrentThreadPeriod;
 		CurrentPeriodDuration = 0;
 		SwitchProcesses();
 	}
 	else if(CurrentThreadPeriod && CurrentPeriodDuration >= QuickThreadPeriod)
 	{
-		//Serial.WriteString(0x1, "Moving to normal threads");
-		CurrentThread = LastNormalThread;
+		Serial.WriteString(0x1, "\r\n\r\nMoving to normal threads");
 		CurrentThreadPeriod = !CurrentThreadPeriod;
 		CurrentPeriodDuration = 0;
 		SwitchProcesses();
 	}
 	else if(CurrentThreadDuration >= CurrentThread->Duration)
 	{
-		//Serial.WriteString(0x1, "Preemptive swap");
+		Serial.WriteString(0x1, "\r\n\r\nPreemptive swap");
 		SwitchProcesses();
 	}
 }
@@ -172,6 +111,20 @@ extern "C" void SysCallSwitch()
 		case QTHREAD_MAKE_ID: //Create Thread %RAX = QTHREAD_MAKE_ID; %RBX = Main; %RCX = ProcessID; %RDX = Duration; Returns ID = %RAX
 		{
 			int ID = GetProcess(RCX)->QThread_Create((void*)RBX, RDX);
+			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
+			break;
+		}
+		
+		case THREAD_MAKE_ID_SELF: //Create Thread %RAX = THREAD_MAKE_ID; %RBX = Main; Returns ID = %RAX
+		{
+			int ID = CurrentThread->OwnerProcess->Thread_Create((void*)RBX);
+			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
+			break;
+		}
+		
+		case QTHREAD_MAKE_ID_SELF: //Create Thread %RAX = QTHREAD_MAKE_ID; %RBX = Main; %RCX = Duration; Returns ID = %RAX
+		{
+			int ID = CurrentThread->OwnerProcess->QThread_Create((void*)RBX, RCX);
 			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
 			break;
 		}

@@ -6,7 +6,6 @@ void AddVMemory(unsigned long Size)
 {
 	int NewFrameCount = (Size / 0x1000) + 2;
 	int Current = 0;
-	MBlockHeader* Start = (CurrentThread->OwnerProcess)->StartBlock;
 	MBlockHeader* PrevEnd = (CurrentThread->OwnerProcess)->EndBlock;
 	while(Current < NewFrameCount)
 	{
@@ -74,7 +73,7 @@ void* Malloc(unsigned long Size)
 {
 	if(Size == 0)
 		return (void*)0;
-	if(Size > MallocBucketLimit) //If Size is too large to be used in the bucket memories
+	if(true || Size > MallocBucketLimit) //If Size is too large to be used in the bucket memories
 	{
 		MBlockHeader* Check = (CurrentThread->OwnerProcess)->StartBlock;
 		while(1)

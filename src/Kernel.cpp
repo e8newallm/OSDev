@@ -4,13 +4,18 @@ char TempStack[0x1000];
 bool Testing = false;
 
 void Kernel_Panic(const char*);
-#include "Sync.h"
+#include "E820.h"
+#include "Miscellaneous/Miscellaneous.h"
+#include "Memory/MemoryMap.h"
+#include "Memory/Paging.h"
+#include "Process.h"
+#include "Interrupts/IDT.h"
 #include "Definitions.h"
 #include "HPET.h"
+
 #include "IO.cpp"
-#include "Serial.cpp"
 #include "Miscellaneous/Miscellaneous.cpp"
-#include "E820.h"
+#include "Serial.cpp"
 #include "Memory/MemoryMap.cpp"
 #include "Memory/Paging.cpp"
 
@@ -25,6 +30,7 @@ void Kernel_Panic(const char*);
 #include "Interrupts/IDT.cpp"
 
 #include "KernelPanic.cpp"
+#include "BasicFunctions.cpp"
 
 int Header[12] __attribute__((section (".Multiboot"))) = 
 {
@@ -54,14 +60,13 @@ extern "C" void Kernel_Start()
 	//Setup Serial ports
 	Serial.Setup(BDA);
 	Serial.WriteString(0x1, "\r\nSerial Setup");
+	SerialLog = SerialQueue();
 	//Setting up memory map
 	PhysMemory.Initialise(mbd, (MemorySeg*)&KernelEnd, 0x1000);
-	MemorySeg* LoopChk = PhysMemory.FindPhyAddr(&KernelEnd);
-	MemorySeg* KernelPointer;
 	//Setting up IDT
 	IDTPos = (long*)PhysMemory[PhysMemory.Size] + PhysMemory.MemorySegSize;
 	IDT = (IDTStruct*)IDTPos;
-	for(char* i = (char*)IDT; (long)i < (long)IDT + sizeof(IDTStruct); i++)
+	for(char* i = (char*)IDT; (unsigned long)i < (unsigned long)IDT + sizeof(IDTStruct); i++)
 	{
 		*i = 0;
 	}
@@ -131,7 +136,7 @@ extern "C" void Kernel_Start()
 		PhysMemory.UsePhyAddr(Position, MEMORYSEG_LOCKED); 
 	}
 	ModelPaging.Pages = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
-	long FinalSeg = (PhysMemory.EOM() - 1)->BaseAddress;
+	unsigned long FinalSeg = (PhysMemory.EOM() - 1)->BaseAddress;
 	for(unsigned long i = 0; i < FinalSeg; i += 0x1000)
 	{
 		unsigned long AlignedPhyAddr = i & 0xFFFFFFFFFFFFF000;
@@ -206,9 +211,10 @@ extern "C" void Kernel_Start()
 	int ID = Process_Make((void*)&SystemIdle, "Idle Process");
 	CurrentThread = GetProcess(ID)->GetThread(0);
 	CurrentThread->NextThread = CurrentThread;
+	RoundRobinThread = CurrentThread;
+	GetProcess(ID)->Start();
 	ID = Process_Make((void*)&Graphics, "Graphics Process");
 	GetProcess(ID)->Start();
-	Serial.WriteString(0x1, "\r\nDone mapping");
 	ID = Process_Make((void*)&SerialWrite, "Log writer");
 	GetProcess(ID)->Start();
 	ID = Process_Make((void*)&TaskManager, "Task Manager");

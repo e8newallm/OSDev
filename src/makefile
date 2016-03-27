@@ -1,7 +1,7 @@
 all:
 	clear
 	clear
-	/home/e8newallm/OSDev/CrossCompiler/bin/x86_64-elf-g++ -o /home/e8newallm/OSDev/tmp/Kernel.o -c /home/e8newallm/OSDev/src/Kernel.cpp -ffreestanding --no-exceptions -fpermissive -std=c++11 -m64 -mno-red-zone -O2 -Wall -Wextra -pedantic
+	/home/e8newallm/OSDev/CrossCompiler/bin/x86_64-elf-g++ -o /home/e8newallm/OSDev/tmp/Kernel.o -c /home/e8newallm/OSDev/src/Kernel.cpp -ffreestanding --no-exceptions -fpermissive -std=c++14 -m64 -mno-red-zone -O2 -Wall -Wextra -pedantic
 	/home/e8newallm/OSDev/CrossCompiler/bin/x86_64-elf-as -o /home/e8newallm/OSDev/tmp/Stage2.o -c /home/e8newallm/OSDev/src/Stage2.s
 	/home/e8newallm/OSDev/CrossCompiler/bin/x86_64-elf-as -o /home/e8newallm/OSDev/tmp/Interrupts.o -c /home/e8newallm/OSDev/src/Interrupts/Interrupts.s
 	/home/e8newallm/OSDev/CrossCompiler/bin/x86_64-elf-as -o /home/e8newallm/OSDev/tmp/Switch.o -c /home/e8newallm/OSDev/src/Switch.s
@@ -21,7 +21,7 @@ headers:
 debug: 
 	clear
 	clear
-	/home/e8newallm/OSDev/CrossCompiler/bin/x86_64-elf-gcc -o /home/e8newallm/OSDev/tmp/Kernel.o -c /home/e8newallm/OSDev/src/Kernel.cpp -ffreestanding --no-exceptions -fpermissive -std=c++11 -m64 -mno-red-zone
+	/home/e8newallm/OSDev/CrossCompiler/bin/x86_64-elf-g++ -o /home/e8newallm/OSDev/tmp/Kernel.o -c /home/e8newallm/OSDev/src/Kernel.cpp -ffreestanding --no-exceptions -fpermissive -std=c++14 -m64 -mno-red-zone
 	/home/e8newallm/OSDev/CrossCompiler/bin/x86_64-elf-as -o /home/e8newallm/OSDev/tmp/Stage2.o -c /home/e8newallm/OSDev/src/Stage2.s
 	/home/e8newallm/OSDev/CrossCompiler/bin/x86_64-elf-as -o /home/e8newallm/OSDev/tmp/Interrupts.o -c /home/e8newallm/OSDev/src/Interrupts/Interrupts.s
 	/home/e8newallm/OSDev/CrossCompiler/bin/x86_64-elf-as -o /home/e8newallm/OSDev/tmp/Switch.o -c /home/e8newallm/OSDev/src/Switch.s
