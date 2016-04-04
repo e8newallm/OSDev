@@ -8,6 +8,7 @@ __attribute__((noinline)) int CreateProcess(void* Main, const char* Name)
 	return ProcessID;
 }
 
+#ifdef ProcessQ
 __attribute__((noinline)) int CreateThread(void* Main, int ProcessID)
 {
 
@@ -39,6 +40,44 @@ __attribute__((noinline)) int CreateQThread(void* Main, int Duration)
 	asm volatile("INT $0x51" : "=a"(ThreadID) : "a"(QTHREAD_MAKE_ID_SELF), "b"(Main), "d"(Duration));
 	return ThreadID;
 }
+#endif
+
+#ifdef ProcessPBS
+__attribute__((noinline)) int CreateThread(void* Main, int ProcessID, int Priority)
+{
+
+	long ThreadID = 0;
+	asm volatile("INT $0x51" : "=a"(ThreadID) : "a"(THREAD_MAKE_ID), "b"(Main), "c"(ProcessID), "d"(Priority));
+	return ThreadID;
+}
+
+__attribute__((noinline)) int CreateThread(void* Main, int Priority)
+{
+
+	long ThreadID = 0;
+	asm volatile("INT $0x51" : "=a"(ThreadID) : "a"(THREAD_MAKE_ID_SELF), "b"(Main), "c"(Priority));
+	return ThreadID;
+}
+#endif
+
+#ifdef ProcessMQS
+
+__attribute__((noinline)) int CreateBackProcess(void* Main, const char* Name)
+{
+
+	long ProcessID = 0;
+	asm volatile("INT $0x51" : "=a"(ProcessID) : "a"(BACK_PROCESS_MAKE_ID), "b"(Main), "c"(Name));
+	return ProcessID;
+}
+
+__attribute__((noinline)) int CreateThread(void* Main, int Priority)
+{
+
+	long ThreadID = 0;
+	asm volatile("INT $0x51" : "=a"(ThreadID) : "a"(THREAD_MAKE_ID_SELF), "b"(Main), "c"(Priority));
+	return ThreadID;
+}
+#endif
 
 __attribute__((noinline)) void MapVideoMemory(void* Start)
 {
@@ -48,6 +87,13 @@ __attribute__((noinline)) void MapVideoMemory(void* Start)
 __attribute__((noinline)) void UpdateWindow(Draw* Data)
 {
 	asm volatile("INT $0x51" : : "a"(UPDATE_WINDOW_ID), "b"(Data));
+}
+
+__attribute__((noinline)) long GetMilli()
+{
+	long Milli = 0;
+	asm volatile("INT $0x51" : "=a"(Milli) : "a"(GET_MILLI_ID));
+	return Milli;
 }
 
 /////////////////////////TEST PROGRAMS////////////////////////////////////////////
@@ -100,7 +146,7 @@ __attribute__((noinline)) void TaskManager()
 		}
 		y+= 15;
 		Window.DrawString("Time: ", 10, y);
-		char* Temp = LongToString(TimeSinceStart);
+		char* Temp = LongToString(GetMilli());
 		Window.DrawString(Temp, 64, y);
 		Free(Temp);
 		Window.Update();
@@ -128,7 +174,7 @@ __attribute__((noinline)) void TestShitTwo()
 {
 	long Temp = 0;
 	SerialLog.WriteToLog("Test shit is running yo");
-	for(int i = 0; i < 400000; i++)
+	for(int i = 0; i < 200000000; i++)
 	{
 		Temp += i;
 	}
@@ -138,22 +184,31 @@ __attribute__((noinline)) void TestShitTwo()
 
 __attribute__((noinline)) void SystemIdle()
 {
-	GetProcess(0)->StartThread(CreateQThread((void*)&TestShit, 500));
-	GetProcess(0)->StartThread(CreateQThread((void*)&TestShitTwo, 600));
+	YieldCPU();
+	SerialLog.WriteToLog("\r\nStarting Test. Millis: ");
+	long Millis = GetMilli();
+	SerialLog.WriteToLog(Millis);
 	while(Result == 0)
 	{
 		SerialLog.WriteToLog("\r\nResult Pending");
 		YieldCPU();
 	}
 	SerialLog.WriteToLog("\r\nThe result is ");
-	SerialLog.WriteToLog(LongToString(Result));
+	SerialLog.WriteToLog(Result);
 	while(Result2 == 0)
 	{
 		SerialLog.WriteToLog("\r\nResult2 Pending");
 		YieldCPU();
 	}
 	SerialLog.WriteToLog("\r\nThe result2 is ");
-	SerialLog.WriteToLog(LongToString(Result2));
+	SerialLog.WriteToLog(Result2);
+	SerialLog.WriteToLog("Final Millis: ");
+	long FinalMillis = GetMilli();
+	SerialLog.WriteToLog(FinalMillis);
+
+	SerialLog.WriteToLog("Total Duration: ");
+	SerialLog.WriteToLog(FinalMillis - Millis);
+	
 	while(1)
 	{
 		YieldCPU();

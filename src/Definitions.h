@@ -8,6 +8,9 @@
 #define PAGE_MAP_ID 5
 #define MAP_VIDEO_MEM_ID 6
 #define UPDATE_WINDOW_ID 7
+#define GET_MILLI_ID 8
+
+#define BACK_PROCESS_MAKE_ID 9
 
 #define CLI() __asm__("CLI");
 #define STI() __asm__("STI");
@@ -28,3 +31,4 @@ unsigned char Dec[11] = "0123456789";
 #define MBlockHeader_InUse 1
 #define MBlockHeader_Start (unsigned char)254
 #define MBlockHeader_End (unsigned char)255
+

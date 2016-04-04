@@ -32,17 +32,17 @@ class Thread
 {
 	public:
 	long Test = 0xDEADBEEF;
-	char Type; //0 = Normal; 1 = Quick
 	char State; 
 	long* TSSRSP;
 	long* TSSRBP;
+	int MaxDuration;
+	int Priority, OriginalPriority;
+	long LastUsage;
 	unsigned char ThreadID;
-	long Duration, MaxDuration;
 	PageFile* Page;
 	Process* OwnerProcess;
 	Thread* NextThread;
 	Thread* NextThreadMutex = 0;
-	Thread(void*, Process*, PageFile*, long);
 	Thread(void*, Process*, PageFile*, long, int);
 	Thread();
 	void Start();
@@ -62,9 +62,8 @@ public:
 	bool Killed;
 	unsigned char ProcessID;
 	Process();
-	Process(void*, const char*, unsigned char);
-	int Thread_Create(void*);
-	int QThread_Create(void*, int);
+	Process(void*, const char*, unsigned char, int);
+	int Thread_Create(void*, int);
 	void Start();
 	void Kill();
 	void StartThread(int);
@@ -74,13 +73,6 @@ public:
 };
 Thread* CurrentThread;
 int CurrentThreadDuration;
-
-//Shortest remaining time
-volatile long QuickThreadPeriod = 600;
-volatile long NormalThreadPeriod = 400;
-volatile bool CurrentThreadPeriod = 0; // 0 = Normal; 1 = Quick
-volatile long CurrentPeriodDuration = 123;
-Thread* RoundRobinThread;
 
 Process ProcessList[256];
 

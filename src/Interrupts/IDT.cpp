@@ -54,30 +54,16 @@ extern "C" void SystemTimerInterrupt()
 {
 	TimeSinceStart += 10;
 	CurrentThreadDuration += 10;
+	#ifdef ProcessQ
 	CurrentPeriodDuration += 10;
+	#endif
+	#ifdef ProcessMQS
+	*CurrentPeriodDuration += 10;
+	#endif
 	Output8(0x40, 0x9B);
 	Output8(0x40, 0x2E);
 	PICEndInt((char)0);
-	if(!CurrentThreadPeriod && CurrentPeriodDuration >= NormalThreadPeriod)
-	{
-		Serial.WriteString(0x1, "\r\n\r\nMoving to fast threads");
-		RoundRobinThread = CurrentThread;
-		CurrentThreadPeriod = !CurrentThreadPeriod;
-		CurrentPeriodDuration = 0;
-		SwitchProcesses();
-	}
-	else if(CurrentThreadPeriod && CurrentPeriodDuration >= QuickThreadPeriod)
-	{
-		Serial.WriteString(0x1, "\r\n\r\nMoving to normal threads");
-		CurrentThreadPeriod = !CurrentThreadPeriod;
-		CurrentPeriodDuration = 0;
-		SwitchProcesses();
-	}
-	else if(CurrentThreadDuration >= CurrentThread->Duration)
-	{
-		Serial.WriteString(0x1, "\r\n\r\nPreemptive swap");
-		SwitchProcesses();
-	}
+	Scheduling();
 }
 
 extern "C" void SysCall();
@@ -95,12 +81,37 @@ extern "C" void SysCallSwitch()
 	
 	switch(RAX)
 	{
+		#ifdef ProcessRR
 		case PROCESS_MAKE_ID: //Create Process %RAX = PROCESS_MAKE_ID; %RBX = Main; %RCX = Name; Returns ID = %RAX
 		{
 			int ID = Process_Make((void*)RBX, (const char*)RCX);
 			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
 			break;
 		}
+		
+		case THREAD_MAKE_ID: //Create Thread %RAX = THREAD_MAKE_ID; %RBX = Main; %RCX = ProcessID; Returns ID = %RAX
+		{
+			int ID = GetProcess(RCX)->Thread_Create((void*)RBX);
+			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
+			break;
+		}
+		
+		case THREAD_MAKE_ID_SELF: //Create Thread %RAX = THREAD_MAKE_ID; %RBX = Main; Returns ID = %RAX
+		{
+			int ID = CurrentThread->OwnerProcess->Thread_Create((void*)RBX);
+			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
+			break;
+		}
+		#endif
+		
+		#ifdef ProcessQ
+		case PROCESS_MAKE_ID: //Create Process %RAX = PROCESS_MAKE_ID; %RBX = Main; %RCX = Name; Returns ID = %RAX
+		{
+			int ID = Process_Make((void*)RBX, (const char*)RCX);
+			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
+			break;
+		}
+		
 		case THREAD_MAKE_ID: //Create Thread %RAX = THREAD_MAKE_ID; %RBX = Main; %RCX = ProcessID; Returns ID = %RAX
 		{
 			int ID = GetProcess(RCX)->Thread_Create((void*)RBX);
@@ -115,19 +126,73 @@ extern "C" void SysCallSwitch()
 			break;
 		}
 		
-		case THREAD_MAKE_ID_SELF: //Create Thread %RAX = THREAD_MAKE_ID; %RBX = Main; Returns ID = %RAX
-		{
-			int ID = CurrentThread->OwnerProcess->Thread_Create((void*)RBX);
-			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
-			break;
-		}
-		
 		case QTHREAD_MAKE_ID_SELF: //Create Thread %RAX = QTHREAD_MAKE_ID; %RBX = Main; %RCX = Duration; Returns ID = %RAX
 		{
 			int ID = CurrentThread->OwnerProcess->QThread_Create((void*)RBX, RCX);
 			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
 			break;
 		}
+		
+		case THREAD_MAKE_ID_SELF: //Create Thread %RAX = THREAD_MAKE_ID; %RBX = Main; Returns ID = %RAX
+		{
+			int ID = CurrentThread->OwnerProcess->Thread_Create((void*)RBX);
+			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
+			break;
+		}
+		#endif
+		
+		#ifdef ProcessPBS
+		
+		case PROCESS_MAKE_ID: //Create Process %RAX = PROCESS_MAKE_ID; %RBX = Main; %RCX = Name; %RDX = Priority; Returns ID = %RAX
+		{
+			int ID = Process_Make((void*)RBX, (const char*)RCX, (int)RDX);
+			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
+			break;
+		}
+		
+		case THREAD_MAKE_ID: //Create Thread %RAX = THREAD_MAKE_ID; %RBX = Main; %RCX = ProcessID; %RDX = Priority; Returns ID = %RAX
+		{
+			int ID = GetProcess(RCX)->Thread_Create((void*)RBX, RDX);
+			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
+			break;
+		}
+		case THREAD_MAKE_ID_SELF: //Create Thread %RAX = THREAD_MAKE_ID; %RBX = Main; %RCX = Priority; Returns ID = %RAX
+		{
+			int ID = CurrentThread->OwnerProcess->Thread_Create((void*)RBX, RCX);
+			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
+			break;
+		}
+		#endif
+		
+		#ifdef ProcessMQS
+		case PROCESS_MAKE_ID: //Create Process %RAX = PROCESS_MAKE_ID; %RBX = Main; %RCX = Name; Returns ID = %RAX
+		{
+			int ID = Process_Make((void*)RBX, (const char*)RCX);
+			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
+			break;
+		}
+		
+		case BACK_PROCESS_MAKE_ID: //Create Process %RAX = PROCESS_MAKE_ID; %RBX = Main; %RCX = Name; Returns ID = %RAX
+		{
+			int ID = Back_Process_Make((void*)RBX, (const char*)RCX);
+			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
+			break;
+		}
+		
+		case THREAD_MAKE_ID: //Create Thread %RAX = THREAD_MAKE_ID; %RBX = Main; %RCX = ProcessID; %RDX = Priority; Returns ID = %RAX
+		{
+			int ID = GetProcess(RCX)->Thread_Create((void*)RBX, RDX);
+			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
+			break;
+		}
+		case THREAD_MAKE_ID_SELF: //Create Thread %RAX = THREAD_MAKE_ID; %RBX = Main; %RCX = Priority; Returns ID = %RAX
+		{
+			int ID = CurrentThread->OwnerProcess->Thread_Create((void*)RBX, RCX);
+			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
+			break;
+		}
+		
+		#endif
 		
 		case PAGE_MAP_ID: //Map virtual address %RAX = PAGE_MAP_ID; %RBX = Size; Returns nothing
 		{
@@ -143,6 +208,12 @@ extern "C" void SysCallSwitch()
 			{
 				CurrentThread->Page->MapAddress(((unsigned long)GUI.FrameAddress + i), (long)RBX + i);
 			}
+			break;
+		}
+		
+		case GET_MILLI_ID: //Returns count of milliseconds since system started %RAX = GET_MILLI_ID; Return %RAX = Millis
+		{
+			asm volatile("MOV %0, %%RAX"::"m"(TimeSinceStart) : "%rax");
 			break;
 		}
 	}

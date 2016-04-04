@@ -1,5 +1,9 @@
+//#define ProcessPBS
+//#define ProcessQ
+//#define ProcessRR
+#define ProcessMQS
+
 long TimeSinceStart;
-long TimeSinceStartPart;
 char TempStack[0x1000];
 bool Testing = false;
 
@@ -8,10 +12,24 @@ void Kernel_Panic(const char*);
 #include "Miscellaneous/Miscellaneous.h"
 #include "Memory/MemoryMap.h"
 #include "Memory/Paging.h"
+
+#ifdef ProcessQ
 #include "Process.h"
+#endif
+#ifdef ProcessPBS
+#include "ProcessPBS.h"
+#endif
+#ifdef ProcessRR
+#include "ProcessRR.h"
+#endif
+#ifdef ProcessMQS
+#include "ProcessMQS.h"
+#endif
+
 #include "Interrupts/IDT.h"
 #include "Definitions.h"
 #include "HPET.h"
+#include "Serial.h"
 
 #include "IO.cpp"
 #include "Miscellaneous/Miscellaneous.cpp"
@@ -20,7 +38,20 @@ void Kernel_Panic(const char*);
 #include "Memory/Paging.cpp"
 
 #include "Keyboard.cpp"
+
+#ifdef ProcessRR
+#include "ProcessRR.cpp"
+#endif
+#ifdef ProcessQ
 #include "Process.cpp"
+#endif
+#ifdef ProcessPBS
+#include "ProcessPBS.cpp"
+#endif
+#ifdef ProcessMQS
+#include "ProcessMQS.cpp"
+#endif
+
 #include "Memory/Malloc.cpp"
 
 #include "Video/Video.cpp"
@@ -210,12 +241,17 @@ extern "C" void Kernel_Start()
 	}
 	int ID = Process_Make((void*)&SystemIdle, "Idle Process");
 	CurrentThread = GetProcess(ID)->GetThread(0);
+	#ifdef ProcessQ
 	CurrentThread->NextThread = CurrentThread;
 	RoundRobinThread = CurrentThread;
+	#endif
+	#ifdef ProcessRR
+	CurrentThread->NextThread = CurrentThread;
+	#endif
 	GetProcess(ID)->Start();
 	ID = Process_Make((void*)&Graphics, "Graphics Process");
 	GetProcess(ID)->Start();
-	ID = Process_Make((void*)&SerialWrite, "Log writer");
+	ID = Back_Process_Make((void*)&SerialWrite, "Log writer");
 	GetProcess(ID)->Start();
 	ID = Process_Make((void*)&TaskManager, "Task Manager");
 	GetProcess(ID)->Start();

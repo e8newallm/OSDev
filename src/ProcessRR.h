@@ -32,12 +32,11 @@ class Thread
 {
 	public:
 	long Test = 0xDEADBEEF;
-	char Type; //0 = Normal; 1 = Quick
 	char State; 
 	long* TSSRSP;
 	long* TSSRBP;
 	unsigned char ThreadID;
-	long Duration, MaxDuration;
+	long MaxDuration;
 	PageFile* Page;
 	Process* OwnerProcess;
 	Thread* NextThread;
@@ -75,15 +74,7 @@ public:
 Thread* CurrentThread;
 int CurrentThreadDuration;
 
-//Shortest remaining time
-volatile long QuickThreadPeriod = 600;
-volatile long NormalThreadPeriod = 400;
-volatile bool CurrentThreadPeriod = 0; // 0 = Normal; 1 = Quick
-volatile long CurrentPeriodDuration = 123;
-Thread* RoundRobinThread;
-
 Process ProcessList[256];
-
 
 template <typename ListType, unsigned int S> class FIFOList
 {

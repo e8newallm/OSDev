@@ -1,21 +1,6 @@
 void Scheduling()
 {
-	if(!CurrentThreadPeriod && CurrentPeriodDuration >= NormalThreadPeriod)
-	{
-		//Serial.WriteString(0x1, "\r\n\r\nMoving to fast threads");
-		RoundRobinThread = CurrentThread;
-		CurrentThreadPeriod = !CurrentThreadPeriod;
-		CurrentPeriodDuration = 0;
-		SwitchProcesses();
-	}
-	else if(CurrentThreadPeriod && CurrentPeriodDuration >= QuickThreadPeriod)
-	{
-		//Serial.WriteString(0x1, "\r\n\r\nMoving to normal threads");
-		CurrentThreadPeriod = !CurrentThreadPeriod;
-		CurrentPeriodDuration = 0;
-		SwitchProcesses();
-	}
-	else if(CurrentThreadDuration >= CurrentThread->Duration)
+	if(CurrentThreadDuration >= CurrentThread->MaxDuration)
 	{
 		//Serial.WriteString(0x1, "\r\n\r\nPreemptive swap");
 		SwitchProcesses();
@@ -38,13 +23,13 @@ __attribute__((noinline)) Thread* GetThread(int ProcessID, int ThreadID)
 	return &(ProcessTemp->ThreadList[ThreadID]);
 }
 
-int Process_Make(void* Main, const char* Name)
+int Process_Make(void* Main, const char* Name, int Priority)
 {
 	for(long i = 0; i < 256; i++)
 	{
 		if(ProcessList[i].Available)
 		{
-			new (ProcessList+i) Process(Main, Name, (unsigned char)i);
+			new (ProcessList+i) Process(Main, Name, (unsigned char)i, Priority);
 			return i;
 		}
 	}
@@ -54,7 +39,7 @@ int Process_Make(void* Main, const char* Name)
 
 /////////////////////////PROCESS CODE///////////////////////////////////////
 
-Process::Process(void* Main, const char* Name, unsigned char i)
+Process::Process(void* Main, const char* Name, unsigned char i, int InPriority)
 {
 	Available = false;
 	ProcessID = i;
@@ -80,7 +65,7 @@ Process::Process(void* Main, const char* Name, unsigned char i)
 	BlockSetup->NextUsage = MBlockHeader_End;
 	BlockSetup->NextSize = 0;
 	EndBlock = (MBlockHeader*)(ProcessMemStart + 0x1000 - sizeof(MBlockHeader));
-	Thread_Create(Main);
+	Thread_Create(Main, InPriority);
 	Killed = false;
 }
 
@@ -90,55 +75,30 @@ Process::Process()
 	Available = true;
 }
 
-extern "C" void SwitchProcesses() //SHORTEST REMAINING TIME
+extern "C" void SwitchProcesses() //Priority Based Scheduling
 {
 	CurrentThreadDuration = 0;
-	
 	Thread* Next = (Thread*)0;
-	if(CurrentThreadPeriod)
+	CurrentThread->Priority = CurrentThread->OriginalPriority-1;
+	CurrentThread->LastUsage = TimeSinceStart;
+	for(unsigned short i = 0; i < 256; i++)
 	{
-		//Serial.WriteString(0x1, "\r\nQuickthread time");
-		for(unsigned short i = 0; i < 256; i++)
+		Process* CurProcess = GetProcess(i);
+		if(!CurProcess->Available)
 		{
-			Process* CurProcess = GetProcess(i);
-			if(!CurProcess->Available)
+			for(unsigned short j = 0; j < 256; j++)
 			{
-				for(unsigned short j = 0; j < 256; j++)
+				Thread* CurThread = CurProcess->GetThread(j);
+				if(CurThread->State == THREADSTATE_RUNNING)
 				{
-					Thread* CurThread = CurProcess->GetThread(j);
-					if(!CurThread->State == THREADSTATE_AVAILABLE && CurThread->Type && (Next == (Thread*)0 || CurThread->MaxDuration < Next->MaxDuration))
+					CurThread->Priority++;
+					if(Next == (Thread*)0 || CurThread->Priority > Next->Priority || (CurThread->Priority == Next->Priority && CurThread->LastUsage < Next->LastUsage))
 						Next = CurThread;
 				}
 			}
 		}
-		if(Next == (Thread*)0) //No quickthreads
-		{
-			//Serial.WriteString(0x1, "\r\nNo quickthreads");
-			CurrentThreadPeriod = !CurrentThreadPeriod;
-			Next = RoundRobinThread->NextThread;
-			while(Next->State != THREADSTATE_RUNNING)
-			{
-				Next = Next->NextThread;
-				RoundRobinThread->NextThread = Next;
-			}
-			RoundRobinThread = Next;
-		}
-		else
-		{
-			//Serial.WriteString(0x1, "\r\nQuickthread found");
-		}
 	}
-	else
-	{
-		//Serial.WriteString(0x1, "\r\nNormalthread time");
-		Next = RoundRobinThread->NextThread;
-		while(Next->State != THREADSTATE_RUNNING)
-		{
-			Next = Next->NextThread;
-			RoundRobinThread->NextThread = Next;
-		}
-		RoundRobinThread = Next;
-	}
+	
 	long** NextRSP = &(Next->TSSRSP);
 	long* NextPage = (Next->Page)->Pages;
 	long** CurrentRSP = &(CurrentThread->TSSRSP);
@@ -177,14 +137,14 @@ void Process::Kill()
 
 /////////////////////////THREADING CODE///////////////////////////////////////
 
-int Process::Thread_Create(void* Main)
+int Process::Thread_Create(void* Main, int Priority)
 {
 	CLI();
 	for(long i = 0; i < 256; i++)
 	{
 		if(ThreadList[i].State == THREADSTATE_AVAILABLE)
 		{
-			new (ThreadList+i) Thread(Main, this, &Page, i);
+			new (ThreadList+i) Thread(Main, this, &Page, i, Priority);
 			return i;
 		}
 	}
@@ -192,27 +152,15 @@ int Process::Thread_Create(void* Main)
 	return -1;
 }
 
-int Process::QThread_Create(void* Main, int Duration)
+Thread::Thread(void* Main, Process* OwnerProcessIn, PageFile* PageIn, long IDThread, int InPriority)
 {
-	for(long i = 0; i < 256; i++)
-	{
-		if(ThreadList[i].State == THREADSTATE_AVAILABLE)
-		{
-			new (ThreadList+i) Thread(Main, this, &Page, i, Duration);
-			return i;
-		}
-	}
-	return -1;
-}
-
-Thread::Thread(void* Main, Process* OwnerProcessIn, PageFile* PageIn, long IDThread)
-{
-	Type = 0; //NORMAL THREAD
 	State = THREADSTATE_READY;
 	ThreadID = IDThread;
 	OwnerProcess = OwnerProcessIn;
 	Page = PageIn;
-	MaxDuration = 20000;
+	Priority = InPriority;
+	OriginalPriority = InPriority;
+	MaxDuration = 100;
 	char* Stack = (char*)((StackSpaceStart + (IDThread * StackSize)));
 	long Temp = (long)PhysMemory.UseFreePhyAddr();
 	Page->MapAddress(Temp, (unsigned long)((Stack + TSSOffset - 1)));
@@ -229,41 +177,10 @@ Thread::Thread(void* Main, Process* OwnerProcessIn, PageFile* PageIn, long IDThr
 	StackSetup[1] = (long)&ReturnThread; //End thread address
 	Page = &(OwnerProcess->Page);
 }
-
-Thread::Thread(void* Main, Process* OwnerProcessIn, PageFile* PageIn, long IDThread, int DurationIn)
-{
-	Type = 1; //QTHREAD
-	State = THREADSTATE_READY;
-	ThreadID = IDThread;
-	OwnerProcess = OwnerProcessIn;
-	Page = PageIn;
-	MaxDuration = DurationIn;
-	char* Stack = (char*)((StackSpaceStart + (IDThread * StackSize)));
-	long Temp = (long)PhysMemory.UseFreePhyAddr();
-	Page->MapAddress(Temp, (unsigned long)((Stack + TSSOffset - 1)));
-	TSSRSP = (long*)((Stack + TSSOffset - 1) - (8 * 17)); //Add starting values to stack for ProcessSwitch to switch in
-	TSSRBP = (long*)(Stack + TSSOffset - 1);
-	long* StackSetup = PhysicalAccess(Temp  + 0xFFF - (8 * 17));
-	StackSetup[0] = 0x3200; //EFLAG starting value (IF=1 IOPL=2)
-	StackSetup[16] = (long)&InitThread; //Code start address
-	StackSetup[15] = (long)(Stack + StackSize - 1);
-	Temp = (long)PhysMemory.UseFreePhyAddr();
-	Page->MapAddress(Temp, (unsigned long)(Stack + StackSize - 0x1000));
-	StackSetup = PhysicalAccess(Temp  + 0xFFF - (8 * 2));
-	StackSetup[0] = (long)Main; //End thread address
-	StackSetup[1] = (long)&ReturnThread; //End thread address
-	Page = &(OwnerProcess->Page);
-}
-
 
 void Thread::Start()
 {
 	State = THREADSTATE_RUNNING;
-	if(Type == 0)
-	{
-		NextThread = RoundRobinThread->NextThread;
-		RoundRobinThread->NextThread = this;
-	}
 }
 
 Thread::Thread()

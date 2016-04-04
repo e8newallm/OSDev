@@ -28,11 +28,15 @@ class Process;
 #define THREADSTATE_RUNNING 2
 #define THREADSTATE_BLOCKED 3
 
+#define THREADTYPE_UI 0
+#define THREADTYPE_NORM 1
+#define THREADTYPE_BACK 2
+
 class Thread
 {
 	public:
 	long Test = 0xDEADBEEF;
-	char Type; //0 = Normal; 1 = Quick
+	char Type; //0 = UI; 1 = Normal; 2 = Background
 	char State; 
 	long* TSSRSP;
 	long* TSSRBP;
@@ -40,9 +44,9 @@ class Thread
 	long Duration, MaxDuration;
 	PageFile* Page;
 	Process* OwnerProcess;
+	long LastUsage;
 	Thread* NextThread;
 	Thread* NextThreadMutex = 0;
-	Thread(void*, Process*, PageFile*, long);
 	Thread(void*, Process*, PageFile*, long, int);
 	Thread();
 	void Start();
@@ -62,9 +66,8 @@ public:
 	bool Killed;
 	unsigned char ProcessID;
 	Process();
-	Process(void*, const char*, unsigned char);
-	int Thread_Create(void*);
-	int QThread_Create(void*, int);
+	Process(void*, const char*, unsigned char, bool);
+	int Thread_Create(void*, int);
 	void Start();
 	void Kill();
 	void StartThread(int);
@@ -73,14 +76,21 @@ public:
 	Thread* GetThread(int);
 };
 Thread* CurrentThread;
+Thread* UIThread;
+Thread* NormalThread;
+Thread* BackgroundThread;
 int CurrentThreadDuration;
 
-//Shortest remaining time
-volatile long QuickThreadPeriod = 600;
-volatile long NormalThreadPeriod = 400;
-volatile bool CurrentThreadPeriod = 0; // 0 = Normal; 1 = Quick
-volatile long CurrentPeriodDuration = 123;
-Thread* RoundRobinThread;
+volatile long UIThreadPeriod = 600;
+volatile long NormalThreadPeriod = 300;
+volatile long BackgroundThreadPeriod = 100;
+
+volatile long UIThreadDuration = 0;
+volatile long NormalThreadDuration = 0;
+volatile long BackgroundThreadDuration = 0;
+
+volatile long* CurrentThreadPeriod;
+volatile long* CurrentPeriodDuration;
 
 Process ProcessList[256];
 
