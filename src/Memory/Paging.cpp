@@ -56,6 +56,7 @@ void PageFile::CreateTable(unsigned long VirtAddr)
 
 unsigned long PageFile::FreeAll()
 {
+	return 0;
 	for(long PML4Index = 0; PML4Index < 512; PML4Index++)
 	{
 		if(Pages[PML4Index] != (long)0)
@@ -75,7 +76,6 @@ unsigned long PageFile::FreeAll()
 							{
 								if(PhysicalAccess(PETable)[PTIndex] != (long)0)
 								{
-									PhysicalAccess(PETable)[PTIndex] = 0x0;
 									//PhysMemory.FreePhyAddr(PhysMemory[PhysMemory.AddrToPos((void*)(CONVERTTOPML4(PML4Index) + CONVERTTOPDPT(PDPTIndex)
 									//					+ CONVERTTOPD(PDIndex) + CONVERTTOPT(PTIndex)))]);
 								}

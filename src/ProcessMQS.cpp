@@ -96,86 +96,92 @@ extern "C" void SwitchProcesses() //MULTI QUEUE SCHEDULER
 	CurrentThreadDuration = 0;
 	CurrentThread->LastUsage = TimeSinceStart;
 	Thread* Next = (Thread*)0;
-	
+	//Serial.WriteString(0x1, "\r\nNEW SWATPEGGGEWFGEWF");
 	while(Next == 0)
-	{ 
-		if(UIThreadDuration < UIThreadPeriod)
+	{
+		//Serial.WriteString(0x1, "\r\nLoop");
+		if(UIThreadDuration < UIThreadPeriod && UIThread != 0)
 		{
-			for(unsigned short i = 0; i < 256; i++)
+			//Serial.WriteString(0x1, "\r\nTrying UI");
+			Thread* PotentialNext = UIThread->NextThread;
+			while(PotentialNext->State != THREADSTATE_RUNNING)
 			{
-				Process* CurProcess = GetProcess(i);
-				if(!CurProcess->Available)
+				//Serial.WriteString(0x1, "\r\n\tLOOP");
+				if(PotentialNext == UIThread)
 				{
-					for(unsigned short j = 0; j < 256; j++)
-					{
-						Thread* CurThread = CurProcess->GetThread(j);
-						if(CurThread->State == THREADSTATE_RUNNING && CurThread->Type == THREADTYPE_UI)
-						{
-							if(Next == (Thread*)0 || CurThread->LastUsage < Next->LastUsage)
-								Next = CurThread;
-						}
-					}
+					UIThread = 0;
+					PotentialNext = 0;
+					break;
 				}
+				UIThread->NextThread = PotentialNext->NextThread;
+				PotentialNext = UIThread->NextThread;
 			}
-			if(Next != 0)
+			if(PotentialNext != 0)
 			{
 				CurrentThreadPeriod = &UIThreadPeriod;
 				CurrentPeriodDuration = &UIThreadDuration;
+				UIThread = PotentialNext;
+				Next = PotentialNext;
 				break;
 			}
 		}
-		if(NormalThreadDuration < NormalThreadPeriod)
+		if(NormalThreadDuration < NormalThreadPeriod && NormalThread != 0)
 		{
-			for(unsigned short i = 0; i < 256; i++)
+			//Serial.WriteString(0x1, "\r\nTrying Normal");
+			Thread* PotentialNext = NormalThread->NextThread;
+			//Serial.WriteString(0x1, "\r\nPotentialNext: ");
+			//Serial.WriteString(0x1, PotentialNext->OwnerProcess->ProcessName);
+			while(PotentialNext->State != THREADSTATE_RUNNING)
 			{
-				Process* CurProcess = GetProcess(i);
-				if(!CurProcess->Available)
+				//Serial.WriteString(0x1, "\r\n\tLOOP");
+				if(PotentialNext == NormalThread)
 				{
-					for(unsigned short j = 0; j < 256; j++)
-					{
-						Thread* CurThread = CurProcess->GetThread(j);
-						if(CurThread->State == THREADSTATE_RUNNING && CurThread->Type == THREADTYPE_NORM)
-						{
-							if(Next == (Thread*)0 || CurThread->LastUsage < Next->LastUsage)
-								Next = CurThread;
-						}
-					}
+					NormalThread = 0;
+					PotentialNext = 0;
+					break;
 				}
+				NormalThread->NextThread = PotentialNext->NextThread;
+				PotentialNext = NormalThread->NextThread;
+				//Serial.WriteString(0x1, "\r\nPotentialNext: ");
+				//Serial.WriteString(0x1, PotentialNext->OwnerProcess->ProcessName);
 			}
-			if(Next != 0)
+			if(PotentialNext != 0)
 			{
 				CurrentThreadPeriod = &NormalThreadPeriod;
 				CurrentPeriodDuration = &NormalThreadDuration;
+				NormalThread = PotentialNext;
+				Next = PotentialNext;
 				break;
 			}
 		}
-		if(BackgroundThreadDuration < BackgroundThreadPeriod)
+		if(BackgroundThreadDuration < BackgroundThreadPeriod && BackgroundThread != 0)
 		{
-			for(unsigned short i = 0; i < 256; i++)
+			//Serial.WriteString(0x1, "\r\nTrying Back");
+			Thread* PotentialNext = BackgroundThread->NextThread;
+			while(PotentialNext->State != THREADSTATE_RUNNING)
 			{
-				Process* CurProcess = GetProcess(i);
-				if(!CurProcess->Available)
+				//Serial.WriteString(0x1, "\r\n\tLOOP");
+				if(PotentialNext == BackgroundThread)
 				{
-					for(unsigned short j = 0; j < 256; j++)
-					{
-						Thread* CurThread = CurProcess->GetThread(j);
-						if(CurThread->State == THREADSTATE_RUNNING && CurThread->Type == THREADTYPE_BACK)
-						{
-							if(Next == (Thread*)0 || CurThread->LastUsage < Next->LastUsage)
-								Next = CurThread;
-						}
-					}
+					BackgroundThread = 0;
+					PotentialNext = 0;
+					break;
 				}
+				BackgroundThread->NextThread = PotentialNext->NextThread;
+				PotentialNext = BackgroundThread->NextThread;
 			}
-			if(Next != 0)
+			if(PotentialNext != 0)
 			{
 				CurrentThreadPeriod = &BackgroundThreadPeriod;
 				CurrentPeriodDuration = &BackgroundThreadDuration;
+				BackgroundThread = PotentialNext;
+				Next = PotentialNext;
 				break;
 			}
 		}
 		if(BackgroundThreadDuration >= BackgroundThreadPeriod || NormalThreadDuration >= NormalThreadPeriod || UIThreadDuration >= UIThreadDuration)
 		{
+			//Serial.WriteString(0x1, "\r\nFailed! Resetting periods");
 			BackgroundThreadDuration = 0;
 			NormalThreadDuration = 0;
 			UIThreadDuration = 0;
@@ -183,6 +189,8 @@ extern "C" void SwitchProcesses() //MULTI QUEUE SCHEDULER
 		else
 			Next = GetProcess(0)->GetThread(0); //IDLE
 	}
+	//Serial.WriteString(0x1, "\r\nStarting thread from ");
+	//Serial.WriteString(0x1, Next->OwnerProcess->ProcessName);
 	long** NextRSP = &(Next->TSSRSP);
 	long* NextPage = (Next->Page)->Pages;
 	long** CurrentRSP = &(CurrentThread->TSSRSP);
@@ -216,6 +224,53 @@ void Process::Kill()
 	Killed = true;
 	Available = true;
 	Page.FreeAll();
+	for(long i = 0; i < 256; i++)
+	{
+		if(ThreadList[i].State == THREADSTATE_RUNNING)
+			ThreadList[i].Kill();
+	}
+	Thread* CurrTest = UIThread->NextThread;
+	Thread* NextTest;
+	if(UIThread != 0)
+	{
+		NextTest = CurrTest->NextThread;
+		while(CurrTest != UIThread)
+		{
+			if(NextTest->OwnerProcess == this)
+			{
+				NextTest = NextTest->NextThread;
+				CurrTest->NextThread = NextTest;
+			}
+		}
+	}
+	
+	CurrTest = NormalThread->NextThread;
+	if(NormalThread != 0)
+	{
+		NextTest = CurrTest->NextThread;
+		while(CurrTest != NormalThread)
+		{
+			if(NextTest->OwnerProcess == this)
+			{
+				NextTest = NextTest->NextThread;
+				CurrTest->NextThread = NextTest;
+			}
+		}
+	}
+	
+	CurrTest = BackgroundThread->NextThread;
+	if(BackgroundThread != 0)
+	{
+		NextTest = CurrTest->NextThread;
+		while(CurrTest != BackgroundThread)
+		{
+			if(NextTest->OwnerProcess == this)
+			{
+				NextTest = NextTest->NextThread;
+				CurrTest->NextThread = NextTest;
+			}
+		}
+	}
 	//TODO: Add freeing of memory and closing of process if the current active one
 }
 
@@ -244,7 +299,7 @@ Thread::Thread(void* Main, Process* OwnerProcessIn, PageFile* PageIn, long IDThr
 	ThreadID = IDThread;
 	OwnerProcess = OwnerProcessIn;
 	Page = PageIn;
-	MaxDuration = 200;
+	MaxDuration = 20000;
 	char* Stack = (char*)((StackSpaceStart + (IDThread * StackSize)));
 	long Temp = (long)PhysMemory.UseFreePhyAddr();
 	Page->MapAddress(Temp, (unsigned long)((Stack + TSSOffset - 1)));
@@ -265,6 +320,33 @@ Thread::Thread(void* Main, Process* OwnerProcessIn, PageFile* PageIn, long IDThr
 void Thread::Start()
 {
 	State = THREADSTATE_RUNNING;
+	switch(Type)
+	{
+		case THREADTYPE_UI:
+		{
+			if(UIThread == 0)
+				UIThread = this;
+			NextThread = UIThread->NextThread;
+			UIThread->NextThread = this;
+			break;
+		}
+		case THREADTYPE_NORM:
+		{
+			if(NormalThread == 0)
+				NormalThread = this;
+			NextThread = NormalThread->NextThread;
+			NormalThread->NextThread = this;
+			break;
+		}
+		case THREADTYPE_BACK:
+		{
+			if(BackgroundThread == 0)
+				BackgroundThread = this;
+			NextThread = BackgroundThread->NextThread;
+			BackgroundThread->NextThread = this;
+			break;
+		}
+	}
 }
 
 Thread::Thread()
@@ -286,18 +368,22 @@ void Thread::Block()
 
 extern "C" __attribute__((noinline))  void BeginThread()
 {
-	SerialLog.WriteToLog("\r\nStarting Process: ");
-	SerialLog.WriteToLog(CurrentThread->OwnerProcess->ProcessName);
 	return;
 }
 
 __attribute__((noinline)) void ReturnThread()
 {
-	CurrentThread->Kill();
 	if(CurrentThread->ThreadID == 0)
 	{
 		CurrentThread->OwnerProcess->Kill();
 	}
+	Thread* StartThreads = CurrentThread->WaitingEndQueue;
+	while(StartThreads != 0)
+	{
+		StartThreads->Start();
+		StartThreads = StartThreads->WaitingEndQueueNext;
+	}
+	CurrentThread->Kill();
 	YieldCPU();
 }
 

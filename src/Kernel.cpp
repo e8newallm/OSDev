@@ -1,7 +1,7 @@
-//#define ProcessPBS
+#define ProcessPBS
 //#define ProcessQ
 //#define ProcessRR
-#define ProcessMQS
+//#define ProcessMQS
 
 long TimeSinceStart;
 char TempStack[0x1000];
@@ -81,7 +81,22 @@ long* IDTPos;
 multiboot_info_t* mbd;
 char* BDA = (char*)0x400;
 PageFile KernelMem; // The kernel memory
+
+#include "KernelInterrupts.cpp"
+#ifdef ProcessRR
+#include "TestProgramsRR.cpp"
+#endif
+#ifdef ProcessQ
+#include "TestProgramsQ.cpp"
+#endif
+#ifdef ProcessPBS
+#include "TestProgramsPBS.cpp"
+#endif
+#ifdef ProcessMQS
+#include "TestProgramsMQS.cpp"
+#endif
 #include "KernelProcesses.cpp"
+
 
 /////////////////////KERNEL START///////////////////////////
 extern "C" void Kernel_Start()
@@ -90,7 +105,6 @@ extern "C" void Kernel_Start()
 	CLI();
 	//Setup Serial ports
 	Serial.Setup(BDA);
-	Serial.WriteString(0x1, "\r\nSerial Setup");
 	SerialLog = SerialQueue();
 	//Setting up memory map
 	PhysMemory.Initialise(mbd, (MemorySeg*)&KernelEnd, 0x1000);
@@ -239,7 +253,7 @@ extern "C" void Kernel_Start()
 	{
 		ProcessList[i].Available = true;
 	}
-	int ID = Process_Make((void*)&SystemIdle, "Idle Process");
+	int ID = Process_Make((void*)&SystemIdle, "Idle Process", 1);
 	CurrentThread = GetProcess(ID)->GetThread(0);
 	#ifdef ProcessQ
 	CurrentThread->NextThread = CurrentThread;
@@ -248,12 +262,19 @@ extern "C" void Kernel_Start()
 	#ifdef ProcessRR
 	CurrentThread->NextThread = CurrentThread;
 	#endif
+	#ifdef ProcessMQS
+	CurrentThread->NextThread = CurrentThread;
+	CurrentThreadPeriod = &BackgroundThreadPeriod;
+	CurrentPeriodDuration = &BackgroundThreadDuration;
+	#endif
 	GetProcess(ID)->Start();
-	ID = Process_Make((void*)&Graphics, "Graphics Process");
+	ID = Process_Make((void*)&Graphics, "Graphics Process", 1);
 	GetProcess(ID)->Start();
-	ID = Back_Process_Make((void*)&SerialWrite, "Log writer");
+	ID = Process_Make((void*)&SerialWrite, "Log writer", 1);
 	GetProcess(ID)->Start();
-	ID = Process_Make((void*)&TaskManager, "Task Manager");
+	ID = Process_Make((void*)&TaskManager, "Task Manager", 1);
+	GetProcess(ID)->Start();
+	ID = Process_Make((void*)&TestAutomation, "Test Automation", 1);
 	GetProcess(ID)->Start();
 	//Enables multitasking and PIT(As well as other IRQs)
 	Output8(PICM_Dat, 0xFC); //0xFC

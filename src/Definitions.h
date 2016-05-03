@@ -9,8 +9,9 @@
 #define MAP_VIDEO_MEM_ID 6
 #define UPDATE_WINDOW_ID 7
 #define GET_MILLI_ID 8
-
-#define BACK_PROCESS_MAKE_ID 9
+#define WAIT_THREAD_ID 9
+#define THREAD_START_ID 10
+#define BACK_PROCESS_MAKE_ID 11
 
 #define CLI() __asm__("CLI");
 #define STI() __asm__("STI");

@@ -78,8 +78,42 @@ Process::Process()
 extern "C" void SwitchProcesses() //ROUND ROBIN
 {
 	CurrentThreadDuration = 0;
-	//Serial.WriteString(0x1, "\r\nNormalthread time");
 	Thread* Next = CurrentThread->NextThread;
+	/*Thread* Test = Next;
+	Serial.WriteString(0x1, "\r\n\r\nThreadLoop\r\nBefore(Thread: ");
+	Serial.WriteString(0x1, Test->OwnerProcess->ProcessName);
+	Serial.WriteString(0x1, " ");
+	Serial.WriteLongHex(0x1, Test->ThreadID);
+	Test = Next->NextThread;
+	while(Test != Next)
+	{
+		Serial.WriteString(0x1, ")->(Thread: ");
+		Serial.WriteString(0x1, Test->OwnerProcess->ProcessName);
+		Serial.WriteString(0x1, " ");
+		Serial.WriteLongHex(0x1, Test->ThreadID);
+		Test = Test->NextThread;
+	}
+	Serial.WriteString(0x1, ")END");*/
+	while(Next->State != THREADSTATE_RUNNING)
+	{
+		Next = Next->NextThread;
+		CurrentThread->NextThread = Next;
+	}
+	/*Test = Next;
+	Serial.WriteString(0x1, "\r\nAfter(Thread: ");
+	Serial.WriteString(0x1, Test->OwnerProcess->ProcessName);
+	Serial.WriteString(0x1, " ");
+	Serial.WriteLongHex(0x1, Test->ThreadID);
+	Test = Next->NextThread;
+	while(Test != Next)
+	{
+		Serial.WriteString(0x1, ")->(Thread: ");
+		Serial.WriteString(0x1, Test->OwnerProcess->ProcessName);
+		Serial.WriteString(0x1, " ");
+		Serial.WriteLongHex(0x1, Test->ThreadID);
+		Test = Test->NextThread;
+	}
+	Serial.WriteString(0x1, ")END\r\n\r\n");*/
 	long** NextRSP = &(Next->TSSRSP);
 	long* NextPage = (Next->Page)->Pages;
 	long** CurrentRSP = &(CurrentThread->TSSRSP);
@@ -113,6 +147,21 @@ void Process::Kill()
 	Killed = true;
 	Available = true;
 	Page.FreeAll();
+	for(long i = 0; i < 256; i++)
+	{
+		if(ThreadList[i].State == THREADSTATE_RUNNING)
+			ThreadList[i].Kill();
+	}
+	Thread* CurrTest = CurrentThread->NextThread;
+	Thread* NextTest = CurrTest->NextThread;
+	while(CurrTest != CurrentThread)
+	{
+		if(NextTest->OwnerProcess == this)
+		{
+			NextTest = NextTest->NextThread;
+			CurrTest->NextThread = NextTest;
+		}
+	}
 	//TODO: Add freeing of memory and closing of process if the current active one
 }
 
@@ -139,7 +188,7 @@ Thread::Thread(void* Main, Process* OwnerProcessIn, PageFile* PageIn, long IDThr
 	ThreadID = IDThread;
 	OwnerProcess = OwnerProcessIn;
 	Page = PageIn;
-	MaxDuration = 100;
+	MaxDuration = 200;
 	char* Stack = (char*)((StackSpaceStart + (IDThread * StackSize)));
 	long Temp = (long)PhysMemory.UseFreePhyAddr();
 	Page->MapAddress(Temp, (unsigned long)((Stack + TSSOffset - 1)));
@@ -159,9 +208,11 @@ Thread::Thread(void* Main, Process* OwnerProcessIn, PageFile* PageIn, long IDThr
 
 void Thread::Start()
 {
+	CLI();
 	State = THREADSTATE_RUNNING;
 	NextThread = CurrentThread->NextThread;
 	CurrentThread->NextThread = this;
+	STI();
 }
 
 Thread::Thread()
@@ -171,6 +222,12 @@ Thread::Thread()
 
 void Thread::Kill()
 {
+	Thread* StartThreads = WaitingEndQueue;
+	while(StartThreads != 0)
+	{
+		StartThreads->Start();
+		StartThreads = StartThreads->WaitingEndQueueNext;
+	}
 	State = THREADSTATE_AVAILABLE;
 	//TODO: Add freeing of memory and closing of process if the current active one
 }
@@ -183,18 +240,22 @@ void Thread::Block()
 
 extern "C" __attribute__((noinline))  void BeginThread()
 {
-	SerialLog.WriteToLog("\r\nStarting Process: ");
-	SerialLog.WriteToLog(CurrentThread->OwnerProcess->ProcessName);
+	//SerialLog.WriteToLog("\r\nStarting Process: ");
+	//SerialLog.WriteToLog(CurrentThread->OwnerProcess->ProcessName);
 	return;
 }
 
 __attribute__((noinline)) void ReturnThread()
 {
-	CurrentThread->Kill();
+	/*Serial.WriteString(0x1, "\r\n(Ending Process: ");
+	Serial.WriteString(0x1, CurrentThread->OwnerProcess->ProcessName);
+	Serial.WriteString(0x1, " ");
+	Serial.WriteLongHex(0x1, (long)CurrentThread->ThreadID);
+	Serial.WriteString(0x1, ")\r\n");*/
 	if(CurrentThread->ThreadID == 0)
-	{
 		CurrentThread->OwnerProcess->Kill();
-	}
+	else
+		CurrentThread->Kill();
 	YieldCPU();
 }
 

@@ -202,18 +202,22 @@ void Thread::Block()
 
 extern "C" __attribute__((noinline))  void BeginThread()
 {
-	SerialLog.WriteToLog("\r\nStarting Process: ");
-	SerialLog.WriteToLog(CurrentThread->OwnerProcess->ProcessName);
 	return;
 }
 
 __attribute__((noinline)) void ReturnThread()
 {
-	CurrentThread->Kill();
 	if(CurrentThread->ThreadID == 0)
 	{
 		CurrentThread->OwnerProcess->Kill();
 	}
+	Thread* StartThreads = CurrentThread->WaitingEndQueue;
+	while(StartThreads != 0)
+	{
+		StartThreads->Start();
+		StartThreads = StartThreads->WaitingEndQueueNext;
+	}
+	CurrentThread->Kill();
 	YieldCPU();
 }
 

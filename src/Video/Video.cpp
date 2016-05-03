@@ -1,4 +1,5 @@
 #include "Font.h"
+Mutex VideoBufferMutex;
 
 class Video
 {
@@ -34,45 +35,20 @@ unsigned char* Video::operator()(unsigned int x, unsigned int y)
 	return (SecondFrameAddress + ((y * BytesPerLine) + (x * Depth)));
 }
 
-void Video::DrawPixel(unsigned int x, unsigned int y, unsigned char r, unsigned char g, unsigned char b)
-{
-	unsigned char* Pos = (SecondFrameAddress + ((y * BytesPerLine) + (x * Depth)));
-	*Pos = r;
-	*(Pos + 1) = g;
-	*(Pos + 2)= b;
-}
-
-void Video::DrawRect(unsigned int x, unsigned int y, unsigned int Width, unsigned int Height, unsigned char r, unsigned char g, unsigned char b)
-{
-	unsigned char* Start = (SecondFrameAddress + ((y * BytesPerLine) + (x * Depth)));
-	for(unsigned int yPos = 0; yPos < Height; yPos++)
-	{	
-		for(unsigned int xPos = 0; xPos < Width*Depth; xPos += Depth)
-		{	
-			Start[xPos] = r;
-			Start[xPos+1] = g;
-			Start[xPos+2] = b;
-		}
-		Start += BytesPerLine;
-	}
-}
-
 void Video::Update()
 {
+	VideoBufferMutex.Lock();
 	char* NewFrame = (char*)SecondFrameAddress;
 	char* MainFrame = (char*)FrameAddress;
-	//for(int i = 0; i < End; i++)
-	//{
-		for(int i = 0; i < Height; i++)
+	for(int i = 0; i < Height; i++)
+	{
+		for(int j = 0; j < Width*3; j++)
 		{
-			for(int j = 0; j < Width*3; j++)
-			{
-				int pos = (i * BytesPerLine) + j;
-				MainFrame[pos] = NewFrame[pos];
-			}
+			int pos = (i * BytesPerLine) + j;
+			MainFrame[pos] = NewFrame[pos];
 		}
-		//MainFrame[i] = NewFrame[i];
-	//}
+	}
+	VideoBufferMutex.Unlock();
 }
 
 Video::Video()

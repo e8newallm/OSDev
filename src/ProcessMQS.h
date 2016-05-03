@@ -47,6 +47,8 @@ class Thread
 	long LastUsage;
 	Thread* NextThread;
 	Thread* NextThreadMutex = 0;
+	Thread* WaitingEndQueue = 0; //Waiting for thread to end
+	Thread* WaitingEndQueueNext = 0; //Next thread waiting for the same thread to end
 	Thread(void*, Process*, PageFile*, long, int);
 	Thread();
 	void Start();
@@ -75,15 +77,16 @@ public:
 	char ProcessName[256];
 	Thread* GetThread(int);
 };
+
 Thread* CurrentThread;
 Thread* UIThread;
 Thread* NormalThread;
 Thread* BackgroundThread;
 int CurrentThreadDuration;
 
-volatile long UIThreadPeriod = 600;
-volatile long NormalThreadPeriod = 300;
-volatile long BackgroundThreadPeriod = 100;
+volatile long UIThreadPeriod = 500;
+volatile long NormalThreadPeriod = 450;
+volatile long BackgroundThreadPeriod = 50;
 
 volatile long UIThreadDuration = 0;
 volatile long NormalThreadDuration = 0;

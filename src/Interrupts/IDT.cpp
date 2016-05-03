@@ -202,8 +202,6 @@ extern "C" void SysCallSwitch()
 		
 		case MAP_VIDEO_MEM_ID: //Map virtual address %RAX = MAP_VIDEO_MEM_ID; %RBX = Starting address; Returns nothing
 		{
-			Serial.WriteString(0x1, "\r\nMapping vid Memory: ");
-			Serial.WriteLongHex(0x1, (GUI.BytesPerLine * GUI.Height));
 			for(unsigned long i = 0; i <= (GUI.BytesPerLine * GUI.Height); i += 0x1000)
 			{
 				CurrentThread->Page->MapAddress(((unsigned long)GUI.FrameAddress + i), (long)RBX + i);
@@ -214,6 +212,21 @@ extern "C" void SysCallSwitch()
 		case GET_MILLI_ID: //Returns count of milliseconds since system started %RAX = GET_MILLI_ID; Return %RAX = Millis
 		{
 			asm volatile("MOV %0, %%RAX"::"m"(TimeSinceStart) : "%rax");
+			break;
+		}
+		
+		case THREAD_START_ID: //Starts a thread %RAX = THREAD_START_ID; %RBX = ThreadID; Return nothing
+		{
+			CurrentThread->OwnerProcess->GetThread(RBX)->Start();
+			break;
+		}
+		
+		case WAIT_THREAD_ID: //Waits for thread to end %RAX = WAIT_THREAD_ID; %RBX = ProcessID; %RCX = ThreadID; Return nothing
+		{
+			Thread* WaitingThread = GetProcess(RBX)->GetThread(RCX);
+			CurrentThread->WaitingEndQueueNext = WaitingThread->WaitingEndQueue;
+			WaitingThread->WaitingEndQueue = CurrentThread;
+			CurrentThread->Block();
 			break;
 		}
 	}

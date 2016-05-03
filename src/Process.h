@@ -42,6 +42,8 @@ class Thread
 	Process* OwnerProcess;
 	Thread* NextThread;
 	Thread* NextThreadMutex = 0;
+	Thread* WaitingEndQueue = 0; //Waiting for thread to end
+	Thread* WaitingEndQueueNext = 0; //Next thread waiting for the same thread to end
 	Thread(void*, Process*, PageFile*, long);
 	Thread(void*, Process*, PageFile*, long, int);
 	Thread();

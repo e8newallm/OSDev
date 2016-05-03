@@ -69,19 +69,17 @@ void Draw::Update()
 {
 	Pixel* NewFrame = (Pixel*)Buffer;
 	Pixel* MainFrame = (Pixel*)0xA00000;
-	//Serial.WriteString(0x1, "\r\nScreenWidth: ");
-	//Serial.WriteLongHex(0x1, ScreenWidth);
+	VideoBufferMutex.Lock();
 	for(int i = 0, Maini = y; i < WindowHeight; i++)
 	{
 		for(int j = 0, Mainj = x; j < WindowWidth; j++)
 		{
-			//int pos = (i * Width) + j;
 			MainFrame[(Maini * ScreenWidth) + Mainj] = NewFrame[(i * WindowWidth) + j];
 			Mainj++;
 		}
 		Maini++;
 	}
-	
+	VideoBufferMutex.Unlock();
 }
 
 Draw::Draw()
