@@ -115,3 +115,60 @@ __attribute__((noinline)) void SystemIdle()
 	}
 }
 
+__attribute__((noinline)) void Textbox()
+{
+	int Pointer = 0;
+	long CursorTimer = GetMilli();
+	int BoxHeight = GUI.Height*1/4 - 8, BoxWidth = GUI.Width;
+	int TextHeight = (BoxHeight-4) / 9, TextWidth = BoxWidth / 9;
+	Draw Window = Draw(0, GUI.Height*3/4 + 8, GUI.Width, GUI.Height*1/4 - 8, GUI.Width, GUI.Height);
+	char** Text = (char**)Malloc(8 * TextHeight);
+	for(int i = 0; i < TextHeight; i++)
+	{
+		Text[i] = (char*)Malloc(TextWidth);
+	}
+	while(1)
+	{
+		unsigned char Key = GetKeyPress();
+		if(Key == Key_Backspace)
+		{
+			if(Pointer > 0)
+			{
+				Text[TextHeight-1][Pointer--] = 0;
+				Text[TextHeight-1][Pointer] = '_';
+			}
+		}
+		else if(Key == Key_Enter)
+		{
+			char* Temp = Text[0];
+			Text[TextHeight-1][Pointer] = ' ';
+			for(int i = 0; i < TextHeight-1; i++)
+			{
+				Text[i] = Text[i+1];
+			}
+			Text[TextHeight-1] = Temp;
+			for(int i = 0; i < TextWidth; i++)
+			{
+				Text[TextHeight-1][i] = 0;
+			}
+			Pointer = 0;
+		}
+		else if(IsCharacter(Key) && Pointer < 49)
+		{
+			Text[TextHeight-1][Pointer++] = Key;
+			Text[TextHeight-1][Pointer] = '_';
+		}
+		
+		if(GetMilli() - CursorTimer > 500)
+		{
+			CursorTimer = GetMilli();
+			Text[TextHeight-1][Pointer] ^= '_';
+		}
+		Window.DrawRect(0, 0, GUI.Width - 1, GUI.Height*1/4 - 8, 128, 128, 128);
+		for(int i = 0; i < TextHeight; i++)
+		{
+			Window.DrawString(Text[i], 4, 4+(9*i));
+		}
+		Window.Update();
+	}
+}

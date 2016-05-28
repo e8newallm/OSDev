@@ -12,7 +12,41 @@ RAXTEMP: .quad 0x0
 .global SysCall, SwitchThread
 	
 KeyboardInt:
+	PUSH %RBP
+	PUSH %RAX
+	PUSH %RCX
+	PUSH %RBX
+	PUSH %RDX
+	PUSH %RSI
+	PUSH %RDI
+	PUSH %R8
+	PUSH %R9
+	PUSH %R10
+	PUSH %R11
+	PUSH %R12
+	PUSH %R13
+	PUSH %R14
+	PUSH %R15
+	PUSHF
+	
 	CALL KeyboardInterrupt
+			
+	POPF
+	POP %R15
+	POP %R14
+	POP %R13
+	POP %R12
+	POP %R11
+	POP %R10
+	POP %R9
+	POP %R8
+	POP %RDI
+	POP %RSI
+	POP %RDX
+	POP %RBX
+	POP %RCX
+	POP %RAX
+	POP %RBP
 	IRETQ
 	
 SystemTimerInt:
@@ -32,6 +66,7 @@ SystemTimerInt:
 	PUSH %R14
 	PUSH %R15
 	PUSHF
+	
 	CALL SystemTimerInterrupt
 		
 	POPF
@@ -50,7 +85,6 @@ SystemTimerInt:
 	POP %RCX
 	POP %RAX
 	POP %RBP
-	
 	IRETQ
 
 ################ Exception handlers ######################

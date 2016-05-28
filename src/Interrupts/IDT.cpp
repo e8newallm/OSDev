@@ -38,16 +38,14 @@ void PICMapping_Init(char PICMOff, char PICSOff)
 
 extern "C" void KeyboardInterrupt()
 {
-	PushAll();
-	//CLI();
+	CLI();
 	unsigned char PressedKey = Input8(0x60);
-	if(PressedKey < 0x58)
+	if(PressedKey < sizeof(ScanCodes1))
 	{
 		PutKeyPress(ScanCodes1[PressedKey]);
 	}
 	PICEndInt((char)1);
-	//STI();
-	PopAll();
+	STI();
 }
 
 extern "C" void SystemTimerInterrupt()

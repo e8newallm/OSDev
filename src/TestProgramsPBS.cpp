@@ -5,9 +5,8 @@ __attribute__((noinline)) void TestOne()
 	{
 		Test += Test * Test;
 	}
-	SerialLog.WriteToLog("\t");
+	SerialLog.WriteToLog("\r\n\t");
 	SerialLog.WriteToLog(Test);
-	SerialLog.WriteToLog("\r\n");
 }
 
 __attribute__((noinline)) void TestTwoUI()
@@ -84,7 +83,6 @@ __attribute__((noinline)) void TestThree()
 	CurrentThread->OwnerProcess->GetThread(CreateThread(&TestThreeThree, 8))->Start();
 	while(!TestThreeReturnOne || !TestThreeReturnTwo || !TestThreeReturnThree)
 	{
-		//SerialLog.WriteToLog("\r\nNOPE");
 		YieldCPU();
 	}
 	SerialLog.WriteToLog("\r\nDONE");
@@ -125,19 +123,14 @@ __attribute__((noinline)) void TestFour()
 	{
 		for(int i = 0; i < 10; i++)
 		{
-			//Serial.WriteString(0x1, "\r\nLUL");
 			int Test = CreateThread(&TestFourProgram, 4);
-			//Serial.WriteString(0x1, "LUL");
 			StartThread(Test);
-			//Serial.WriteString(0x1, "LUL");
 		}
-		//Serial.WriteString(0x1, "\r\neLUL");
 		YieldCPU();
 	}
 	
 	while(ThreadDone < 100)
 	{
-		//Serial.WriteString(0x1, "\r\nLUL");
 		YieldCPU();
 	}
 	SerialLog.WriteToLog("DONE\r\n");

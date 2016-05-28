@@ -34,5 +34,5 @@ mount:
 run:
 	bochs -qf /home/e8newallm/OSDev/VM/BochsConfig
 
-run-qemu:
-	qemu-system-x86_64 /home/e8newallm/OSDev/VM/OSHDD.vhd
+kvm:
+	kvm ../VM/OSHDD.vhd

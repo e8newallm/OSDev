@@ -22,8 +22,12 @@
 #define Key_F11 0x9A
 #define Key_F12 0x9B
 
+#define Key_Backspace '\b'
+#define Key_Tab '\t'
+
 unsigned char KeyQueue[20];
 
+#define IsCharacter(x) (((unsigned char)x < Key_Escape || (unsigned char)x > Key_NumLock) && ((unsigned char)x < Key_F1 || (unsigned char)x > Key_F12) && (unsigned char)x != 0) 
 unsigned char GetKeyPress()
 {
 	if(KeyQueue[0] == 0)

@@ -276,6 +276,8 @@ extern "C" void Kernel_Start()
 	GetProcess(ID)->Start();
 	ID = Process_Make((void*)&TestAutomation, "Test Automation", 1);
 	GetProcess(ID)->Start();
+	ID = Process_Make((void*)&Textbox, "Text ewqdwqw", 1);
+	GetProcess(ID)->Start();
 	//Enables multitasking and PIT(As well as other IRQs)
 	Output8(PICM_Dat, 0xFC); //0xFC
 	Output8(PICS_Dat, 0xFF);
