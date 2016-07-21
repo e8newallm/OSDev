@@ -31,6 +31,7 @@ class Process;
 class Thread
 {
 	public:
+	bool KernelThread;
 	long Test = 0xDEADBEEF;
 	char State; 
 	long* TSSRSP;
@@ -55,6 +56,7 @@ class Thread
 class Process
 {
 public:
+	bool KernelProcess;
 	long Test = 0xDEADBEEF;
 	bool Available;
 	PageFile Page;
@@ -64,7 +66,7 @@ public:
 	bool Killed;
 	unsigned char ProcessID;
 	Process();
-	Process(void*, const char*, unsigned char, int);
+	Process(void*, const char*, unsigned char, int, bool);
 	int Thread_Create(void*, int);
 	void Start();
 	void Kill();

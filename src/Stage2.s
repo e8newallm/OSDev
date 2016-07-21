@@ -6,7 +6,7 @@
 
 .data
 	GDT:
-    .quad 0b0            #Null Descriptor - should be present.
+    .quad 0            #Null Descriptor - should be present.
     .quad 0b10100000100110000000000000000000000000000000000000000000 	#64-bit code descriptor. (RING 0)
     .quad 0b10000000100100100000000000000000000000000000000000000000 	#64-bit data descriptor. (RING 0)
 
@@ -82,4 +82,3 @@ BootStart:
 	MOV %CR0, %EAX
 	OR 0x1, %EAX
 	MOV %EAX, %CR0
-	

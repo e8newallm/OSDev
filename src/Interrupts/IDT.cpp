@@ -52,12 +52,6 @@ extern "C" void SystemTimerInterrupt()
 {
 	TimeSinceStart += 10;
 	CurrentThreadDuration += 10;
-	#ifdef ProcessQ
-	CurrentPeriodDuration += 10;
-	#endif
-	#ifdef ProcessMQS
-	*CurrentPeriodDuration += 10;
-	#endif
 	Output8(0x40, 0x9B);
 	Output8(0x40, 0x2E);
 	PICEndInt((char)0);
@@ -79,71 +73,9 @@ extern "C" void SysCallSwitch()
 	
 	switch(RAX)
 	{
-		#ifdef ProcessRR
-		case PROCESS_MAKE_ID: //Create Process %RAX = PROCESS_MAKE_ID; %RBX = Main; %RCX = Name; Returns ID = %RAX
-		{
-			int ID = Process_Make((void*)RBX, (const char*)RCX);
-			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
-			break;
-		}
-		
-		case THREAD_MAKE_ID: //Create Thread %RAX = THREAD_MAKE_ID; %RBX = Main; %RCX = ProcessID; Returns ID = %RAX
-		{
-			int ID = GetProcess(RCX)->Thread_Create((void*)RBX);
-			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
-			break;
-		}
-		
-		case THREAD_MAKE_ID_SELF: //Create Thread %RAX = THREAD_MAKE_ID; %RBX = Main; Returns ID = %RAX
-		{
-			int ID = CurrentThread->OwnerProcess->Thread_Create((void*)RBX);
-			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
-			break;
-		}
-		#endif
-		
-		#ifdef ProcessQ
-		case PROCESS_MAKE_ID: //Create Process %RAX = PROCESS_MAKE_ID; %RBX = Main; %RCX = Name; Returns ID = %RAX
-		{
-			int ID = Process_Make((void*)RBX, (const char*)RCX);
-			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
-			break;
-		}
-		
-		case THREAD_MAKE_ID: //Create Thread %RAX = THREAD_MAKE_ID; %RBX = Main; %RCX = ProcessID; Returns ID = %RAX
-		{
-			int ID = GetProcess(RCX)->Thread_Create((void*)RBX);
-			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
-			break;
-		}
-		
-		case QTHREAD_MAKE_ID: //Create Thread %RAX = QTHREAD_MAKE_ID; %RBX = Main; %RCX = ProcessID; %RDX = Duration; Returns ID = %RAX
-		{
-			int ID = GetProcess(RCX)->QThread_Create((void*)RBX, RDX);
-			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
-			break;
-		}
-		
-		case QTHREAD_MAKE_ID_SELF: //Create Thread %RAX = QTHREAD_MAKE_ID; %RBX = Main; %RCX = Duration; Returns ID = %RAX
-		{
-			int ID = CurrentThread->OwnerProcess->QThread_Create((void*)RBX, RCX);
-			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
-			break;
-		}
-		
-		case THREAD_MAKE_ID_SELF: //Create Thread %RAX = THREAD_MAKE_ID; %RBX = Main; Returns ID = %RAX
-		{
-			int ID = CurrentThread->OwnerProcess->Thread_Create((void*)RBX);
-			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
-			break;
-		}
-		#endif
-		
-		#ifdef ProcessPBS
-		
 		case PROCESS_MAKE_ID: //Create Process %RAX = PROCESS_MAKE_ID; %RBX = Main; %RCX = Name; %RDX = Priority; Returns ID = %RAX
 		{
-			int ID = Process_Make((void*)RBX, (const char*)RCX, (int)RDX);
+			int ID = Process_Make((void*)RBX, (const char*)RCX, (int)RDX, false);
 			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
 			break;
 		}
@@ -160,38 +92,7 @@ extern "C" void SysCallSwitch()
 			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
 			break;
 		}
-		#endif
-		
-		#ifdef ProcessMQS
-		case PROCESS_MAKE_ID: //Create Process %RAX = PROCESS_MAKE_ID; %RBX = Main; %RCX = Name; Returns ID = %RAX
-		{
-			int ID = Process_Make((void*)RBX, (const char*)RCX);
-			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
-			break;
-		}
-		
-		case BACK_PROCESS_MAKE_ID: //Create Process %RAX = PROCESS_MAKE_ID; %RBX = Main; %RCX = Name; Returns ID = %RAX
-		{
-			int ID = Back_Process_Make((void*)RBX, (const char*)RCX);
-			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
-			break;
-		}
-		
-		case THREAD_MAKE_ID: //Create Thread %RAX = THREAD_MAKE_ID; %RBX = Main; %RCX = ProcessID; %RDX = Priority; Returns ID = %RAX
-		{
-			int ID = GetProcess(RCX)->Thread_Create((void*)RBX, RDX);
-			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
-			break;
-		}
-		case THREAD_MAKE_ID_SELF: //Create Thread %RAX = THREAD_MAKE_ID; %RBX = Main; %RCX = Priority; Returns ID = %RAX
-		{
-			int ID = CurrentThread->OwnerProcess->Thread_Create((void*)RBX, RCX);
-			asm volatile("MOV %0, %%RAX"::"m"(ID) : "%rax");
-			break;
-		}
-		
-		#endif
-		
+
 		case PAGE_MAP_ID: //Map virtual address %RAX = PAGE_MAP_ID; %RBX = Size; Returns nothing
 		{
 			AddVMemory(RBX);

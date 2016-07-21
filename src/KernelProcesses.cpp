@@ -27,112 +27,121 @@ __attribute__((noinline)) void SerialWrite()
 	}
 }
 
-__attribute__((noinline)) void TaskManager()
-{
-	Draw Window = Draw(0, 0, GUI.Width/2, GUI.Height*3/4 + 7, GUI.Width, GUI.Height);
-	while(1)
-	{
-		Window.DrawRect(3, 3, (GUI.Width/2) - 6, GUI.Height*3/4 + 4, 255, 255, 255);
-		Window.DrawRect(5, 5, (GUI.Width/2) - 10, GUI.Height*3/4, 128, 128, 128);
-		Window.DrawString("Task Manager", 10, 10);
-		int y = 25;
-		int CurProcessID = 0;
-		Process* CurProcess = GetProcess(0);
-		while(CurProcess->Available == false)
-		{
-			Window.DrawString(CurProcess->ProcessName, 19, y);
-			y += 15;
-			CurProcessID++;
-			CurProcess = GetProcess(CurProcessID);
-		}
-		y+= 15;
-		Window.DrawString("Time: ", 10, y);
-		char* Temp = LongToString(GetMilli());
-		Window.DrawString(Temp, 64, y);
-		Free(Temp);
-		Window.Update();
-		//SerialLog.WriteToLog("DRAWING COMPLETE");
-		YieldCPU();
-	}
-}
-
-long Timer = 0;
-Process* ProcessCheck;
-
-__attribute__((noinline)) void TestAutomation()
-{
-	SerialLog.WriteToLog("\r\nStarting Testing");
-	SerialLog.WriteToLog("\r\nTest 1: Pure CPU usage");
-	Timer = GetMilli();
-	int ID = CreateProcess(&TestOne, "Test One - Pure CPU", 1);
-	ProcessCheck = GetProcess(ID);
-	ProcessCheck->Start();
-	WaitForThread(ID, 0);
-	Timer = GetMilli() - Timer;
-	SerialLog.WriteToLog("\r\nTest 1 result: ");
-	SerialLog.WriteToLog(Timer);
-	SerialLog.WriteToLog("\r\n\r\n");
-	
-	SerialLog.WriteToLog("\r\nTest 2: Graphics\r\n");
-	Timer = GetMilli();
-	ID = CreateProcess(&TestTwo, "Test Two - Graphics draw", 1);
-	ProcessCheck = GetProcess(ID);
-	ProcessCheck->Start();
-	WaitForThread(ID, 0);
-	Timer = GetMilli() - Timer;
-	SerialLog.WriteToLog("\r\nTest 2 result: ");
-	SerialLog.WriteToLog(Timer);
-	SerialLog.WriteToLog("\r\n\r\n");
-	
-	SerialLog.WriteToLog("\r\nTest 3: Multithreaded CPU usage");
-	Timer = GetMilli();
-	ID = CreateProcess(&TestThree, "Test Three - Multithreaded CPU", 1);
-	ProcessCheck = GetProcess(ID);
-	ProcessCheck->Start();
-	WaitForThread(ID, 0);
-	Timer = GetMilli() - Timer;
-	SerialLog.WriteToLog("\r\nTest 3 result: ");
-	SerialLog.WriteToLog(Timer);
-	SerialLog.WriteToLog("\r\n\r\n");
-	
-	SerialLog.WriteToLog("\r\nTest 4: Mutexes");
-	Timer = GetMilli();
-	ID = CreateProcess(&TestFour, "Test Four - Mutexes", 1);
-	ProcessCheck = GetProcess(ID);
-	ProcessCheck->Start();
-	WaitForThread(ID, 0);
-	Timer = GetMilli() - Timer;
-	SerialLog.WriteToLog("\r\nTest 4 result: ");
-	SerialLog.WriteToLog(Timer);
-	SerialLog.WriteToLog("\r\n\r\n");
-}
-
 __attribute__((noinline)) void SystemIdle()
 {
 	while(1)
 	{
+		asm("HLT");
+	}
+}
+
+Draw Window;
+Mutex WindowMutex;
+int TextHeight, TextWidth;
+char** Text;
+
+void Newline()
+{
+	char* Temp = Text[0];
+	for(int i = 0; i < TextHeight-1; i++)
+	{
+		Text[i] = Text[i+1];
+	}
+	Text[TextHeight-1] = Temp;
+	for(int i = 0; i < TextWidth; i++)
+	{
+		Text[TextHeight-1][i] = 0;
+	}
+}
+
+void WriteLine(int Line, char* Message)
+{
+	int i = 0;
+	while(Message[i])
+	{
+		Text[Line][i] = Message[i];
+		i++;
+	}
+}
+
+void WriteLine(int Line, const char* Message)
+{
+	WriteLine(Line, (char*)Message);
+}
+
+void WriteLine(char* Message)
+{
+	WriteLine(TextHeight-1, (char*)Message);
+}
+
+void WriteLine(const char* Message)
+{
+	WriteLine(TextHeight-1, (char*)Message);
+}
+
+void WriteLine(int Line, String Message)
+{
+	for(int i = 0; i < Message.Length; i++)
+	{
+		Text[Line][i] = Message[i];
+	}
+}
+
+void WriteLine(String Message)
+{
+	WriteLine(TextHeight-1, Message);
+}
+
+__attribute__((noinline)) void TextboxUpdate()
+{
+	while(1)
+	{
+		Window.DrawRect(1, 1, GUI.Width - 2, GUI.Height - 2, 128, 128, 128);
+		for(int i = 0; i < TextHeight; i++)
+		{
+			Window.DrawString(Text[i], 4, 4+(9*i));
+		}
+		Window.Update();
 		YieldCPU();
+	}
+}
+
+void Tasklist()
+{
+	int CurProcessID = 0;
+	while(CurProcessID < 256)
+	{
+		Process* CurProcess = GetProcess(CurProcessID);
+		if(CurProcess->Available == false)
+		{
+			WriteLine(CurProcess->ProcessName);
+			Newline();
+		}
+		CurProcessID++;
 	}
 }
 
 __attribute__((noinline)) void Textbox()
 {
-	int Pointer = 0;
+	int Pointer = 2;
 	long CursorTimer = GetMilli();
-	int BoxHeight = GUI.Height*1/4 - 8, BoxWidth = GUI.Width;
-	int TextHeight = (BoxHeight-4) / 9, TextWidth = BoxWidth / 9;
-	Draw Window = Draw(0, GUI.Height*3/4 + 8, GUI.Width, GUI.Height*1/4 - 8, GUI.Width, GUI.Height);
-	char** Text = (char**)Malloc(8 * TextHeight);
+	TextHeight = (GUI.Height-4) / 9, TextWidth = GUI.Width / 9;
+	Window = Draw(0, 0, GUI.Width, GUI.Height, GUI.Width, GUI.Height);
+	Text = (char**)Malloc(8 * TextHeight);
+	
+	StartThread(CreateThread(TextboxUpdate, 2));
 	for(int i = 0; i < TextHeight; i++)
 	{
 		Text[i] = (char*)Malloc(TextWidth);
 	}
+	Text[TextHeight-1][0] = '>';
+	Text[TextHeight-1][1] = ' ';
 	while(1)
 	{
 		unsigned char Key = GetKeyPress();
 		if(Key == Key_Backspace)
 		{
-			if(Pointer > 0)
+			if(Pointer > 2)
 			{
 				Text[TextHeight-1][Pointer--] = 0;
 				Text[TextHeight-1][Pointer] = '_';
@@ -140,20 +149,75 @@ __attribute__((noinline)) void Textbox()
 		}
 		else if(Key == Key_Enter)
 		{
-			char* Temp = Text[0];
-			Text[TextHeight-1][Pointer] = ' ';
-			for(int i = 0; i < TextHeight-1; i++)
+			Text[TextHeight-1][Pointer] = 0;
+			
+			if(strcmp(Text[TextHeight-1]+2, "crash") == 0)
 			{
-				Text[i] = Text[i+1];
+				asm("hlt");
 			}
-			Text[TextHeight-1] = Temp;
-			for(int i = 0; i < TextWidth; i++)
+			
+			if(strcmp(Text[TextHeight-1]+2, "tasklist") == 0)
 			{
-				Text[TextHeight-1][i] = 0;
+				Newline();
+				Tasklist();
 			}
-			Pointer = 0;
+			
+			if(strcmp(Text[TextHeight-1]+2, "pcitest") == 0)
+			{
+				Newline();
+				for(int Bus = 0; Bus < 256; Bus++)
+				{
+					for(int Device = 0; Device < 32; Device++)
+					{
+						if(ReadFromPCI(Bus, Device, 0, 0) != 0xFFFFFFFF)
+						{
+							WriteLine("Device found on Bus ");
+							Newline();
+						}
+					}
+				}
+			}
+			
+			if(strcmp(Text[TextHeight-1]+2, "stringtest") == 0)
+			{
+				Newline();
+				WriteLine("Testing");
+				Newline();
+				String Test("lol");
+				WriteLine(Test);
+				Test = Test + "lol";
+				Newline();
+				WriteLine(Test);
+				Newline();
+				WriteLine(Test + "lol");
+				Newline();
+				WriteLine(Test);
+				Newline();
+				WriteLine(Test+Test);
+				Newline();
+				Test = "test";
+				WriteLine(Test);
+				Newline();
+				Test[1] = 'a';
+				WriteLine(Test);
+				Newline();
+				Test[0] = Test[1];
+				WriteLine(Test);
+				Newline();
+				WriteLine(Test + " " + 1234567);
+				Newline();
+				Test = Test + " " + 1234567;
+				Test = Test + " " + 10;
+				WriteLine(Test);
+				Newline();
+			}
+			
+			Newline();
+			Text[TextHeight-1][0] = '>';
+			Text[TextHeight-1][1] = ' ';
+			Pointer = 2;
 		}
-		else if(IsCharacter(Key) && Pointer < 49)
+		else if(IsCharacter(Key) && Pointer < 200)
 		{
 			Text[TextHeight-1][Pointer++] = Key;
 			Text[TextHeight-1][Pointer] = '_';
@@ -164,11 +228,5 @@ __attribute__((noinline)) void Textbox()
 			CursorTimer = GetMilli();
 			Text[TextHeight-1][Pointer] ^= '_';
 		}
-		Window.DrawRect(0, 0, GUI.Width - 1, GUI.Height*1/4 - 8, 128, 128, 128);
-		for(int i = 0; i < TextHeight; i++)
-		{
-			Window.DrawString(Text[i], 4, 4+(9*i));
-		}
-		Window.Update();
 	}
 }

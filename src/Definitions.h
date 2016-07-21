@@ -33,3 +33,7 @@ unsigned char Dec[11] = "0123456789";
 #define MBlockHeader_Start (unsigned char)254
 #define MBlockHeader_End (unsigned char)255
 
+//PCI definitions
+
+#define PCI_CONFIG_ADDRESS 0xCF8
+#define PCI_CONFIG_DATA 0xCFC

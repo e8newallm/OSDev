@@ -9,14 +9,6 @@ void Kernel_Panic(char* Reason)
 		Serial.WriteString(0x1, "\r\nOffending program: ");
 		Serial.WriteString(0x1, (CurrentThread->OwnerProcess)->ProcessName);
 	}
-	Serial.WriteString(0x1, "\r\n\r\nKernel panic: ");
-	Serial.WriteString(0x1, "\r\n\r\nKernel panic: ");
-	Serial.WriteString(0x1, "\r\n\r\nKernel panic: ");
-	Serial.WriteString(0x1, "\r\n\r\nKernel panic: ");Serial.WriteString(0x1, "\r\n\r\nKernel panic: ");
-	Serial.WriteString(0x1, "\r\n\r\nKernel panic: ");
-	Serial.WriteString(0x1, "\r\n\r\nKernel panic: ");
-	Serial.WriteString(0x1, "\r\n\r\nKernel panic: ");
-	Serial.WriteString(0x1, "\r\n\r\nKernel panic: ");
 	asm("CLI; HLT");
 }
 

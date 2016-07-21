@@ -4,7 +4,7 @@ String::String()
 {
 	Length = 0;
 	AllocSize = 1;
-	Address = (char*)malloc(ALLOC_BLOCK_SIZE);
+	Address = (char*)Malloc(ALLOC_BLOCK_SIZE);
 }
 
 String::String(char* String)
@@ -13,18 +13,30 @@ String::String(char* String)
 	Length = 0;
 	while(*Pointer != (char)0)
 	{
-		PrintChar(*Pointer, 0x0A);
-		PrintChar('(', 0x0A);
-		PrintString(LongToString(Length), 0x0A);
-		PrintString(") ", 0x0A);
 		Length++;
 		Pointer++;
 	}
-	//PrintString("|\r\nLength = ", 0x0A);
-	//PrintString(LongToString(Length), 0x0A);
 	long Allocate = Length + (ALLOC_BLOCK_SIZE - (Length % ALLOC_BLOCK_SIZE));
 	AllocSize = Allocate / ALLOC_BLOCK_SIZE;
-	//Address = (char*)malloc(Allocate);
+	Address = (char*)Malloc(Allocate);
+	for(long i = 0; i < Length; i++)
+	{
+		Address[i] = String[i];
+	}
+}
+
+String::String(const char* String)
+{
+	char* Pointer = (char*)	String;
+	Length = 0;
+	while(*Pointer != (char)0)
+	{
+		Length++;
+		Pointer++;
+	}
+	long Allocate = Length + (ALLOC_BLOCK_SIZE - (Length % ALLOC_BLOCK_SIZE));
+	AllocSize = Allocate / ALLOC_BLOCK_SIZE;
+	Address = (char*)Malloc(Allocate);
 	for(long i = 0; i < Length; i++)
 	{
 		Address[i] = String[i];
@@ -38,10 +50,10 @@ char& String::operator[](long Position)
 
 String String::operator=(String Equal)
 {
-	free(Address);
+	Free(Address);
 	this->Length = Equal.Length;
 	this->AllocSize = Equal.AllocSize;
-	this->Address = (char*)malloc(AllocSize * ALLOC_BLOCK_SIZE);
+	this->Address = (char*)Malloc(AllocSize * ALLOC_BLOCK_SIZE);
 	for(long i = 0; i < Length; i++)
 	{
 		this->Address[i] = Equal.Address[i];
@@ -53,9 +65,9 @@ String String::operator+(String Add)
 {
 	String Temp = String();
 	Temp.Length = Length + Add.Length;
-	long Allocate = Length + (ALLOC_BLOCK_SIZE - (Length % ALLOC_BLOCK_SIZE));
+	long Allocate = Temp.Length + (ALLOC_BLOCK_SIZE - (Temp.Length % ALLOC_BLOCK_SIZE));
 	Temp.AllocSize = Allocate / ALLOC_BLOCK_SIZE;
-	Temp.Address = (char*)malloc(Allocate);
+	Temp.Address = (char*)Malloc(Allocate);
 	int Pos = 0;
 	for(int i = 0; i < Length; i++)
 	{
@@ -66,6 +78,72 @@ String String::operator+(String Add)
 	{
 		Temp.Address[Pos] = Add.Address[i];
 		Pos++;
+	}
+	return Temp;
+}
+
+String String::operator+(char* Add)
+{
+	char* Pointer = Add;
+	String Temp = String();
+	int AddLength = 0;
+	while(*Pointer != (char)0)
+	{
+		AddLength++;
+		Pointer++;
+	}
+	Temp.Length = Length + AddLength;
+	long Allocate = Temp.Length + (ALLOC_BLOCK_SIZE - (Temp.Length % ALLOC_BLOCK_SIZE));
+	Temp.AllocSize = Allocate / ALLOC_BLOCK_SIZE;
+	Temp.Address = (char*)Malloc(Allocate);
+	int Pos = 0;
+	for(int i = 0; i < Length; i++)
+	{
+		Temp.Address[Pos] = Address[i];
+		Pos++;
+	}
+	for(int i = 0; i < AddLength; i++)
+	{
+		Temp.Address[Pos] = Add[i];
+		Pos++;
+	}
+	return Temp;
+}
+
+String String::operator+(const char* Add)
+{
+	return operator+((char*)Add);
+}
+
+String String::operator+(long Value)
+{
+	String Temp = String();
+	Temp.Length = Length + LongDigits(Value);
+	bool Neg = Value < 0;
+	if(Neg)
+	{
+		Value = -Value;
+		Temp.Length++;
+	}
+	long Allocate = Temp.Length + (ALLOC_BLOCK_SIZE - (Temp.Length % ALLOC_BLOCK_SIZE));
+	Temp.AllocSize = Allocate / ALLOC_BLOCK_SIZE;
+	Temp.Address = (char*)Malloc(Allocate);
+	int Pos = 0;
+	for(int i = 0; i < Length; i++)
+	{
+		Temp.Address[Pos] = Address[i];
+		Pos++;
+	}
+	if(Neg)
+	{
+		Temp.Address[Pos] = '-';
+		Pos++;
+	}
+	Temp.Address[Pos] = '0';
+	for(long i = LongDigits(Value)-1; Value != 0 ; i--)
+	{
+		Temp.Address[Pos+i] = (Value % 10) + '0';
+		Value /= 10;
 	}
 	return Temp;
 }

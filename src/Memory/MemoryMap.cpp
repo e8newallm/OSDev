@@ -1,22 +1,22 @@
-MemorySeg* MemoryMap::operator[](unsigned long Position)
+char* MemoryMap::operator[](unsigned long Position)
 {
 	if(Position > Size)
 		return (PhyMemMap+Size);
 	return (PhyMemMap+Position);
 }
 
-MemorySeg* MemoryMap::EOM()
+char* MemoryMap::EOM()
 {
 	return (PhyMemMap+Size);
 }
 
-void MemoryMap::Initialise(multiboot_info_t* mbd, MemorySeg* Start, unsigned long MemSegLength)
+void MemoryMap::Initialise(multiboot_info_t* mbd, char* Start, unsigned long MemSegLength)
 {
 	memory_map_t* mmap = (memory_map*)((long)mbd->mmap_addr);
 	unsigned long MemoryAddr = 0x0;
 	PhyMemMap = Start;
 	MemorySegSize = MemSegLength;
-	MemorySeg* CurrentMap = PhyMemMap;
+	char* CurrentMap = PhyMemMap;
 	
 	while((long)mmap < (long)mbd->mmap_addr + (long)mbd->mmap_length)
 	{
@@ -29,21 +29,20 @@ void MemoryMap::Initialise(multiboot_info_t* mbd, MemorySeg* Start, unsigned lon
 		}
 		while(MemoryAddr + MemorySegSize < BaseAddr + Length)
 		{
-			CurrentMap->BaseAddress = MemoryAddr;
 			if(mmap->type == 1)
 			{
-				CurrentMap->Usage = MEMORYSEG_FREE;
+				*CurrentMap = MEMORYSEG_FREE;
 			}
 			else
 			{
-				CurrentMap->Usage = MEMORYSEG_LOCKED;
+				*CurrentMap = MEMORYSEG_LOCKED;
 			}
-			if(MemoryAddr + MemorySegSize > BaseAddr + Length && CurrentMap->Usage == MEMORYSEG_FREE)
+			if(MemoryAddr + MemorySegSize > BaseAddr + Length && *CurrentMap == MEMORYSEG_FREE)
 			{
 				memory_map_t* Pointer = (memory_map_t*)((long)mmap + mmap->size + sizeof(unsigned int));
 				if(Pointer->type == 0)
 				{
-					CurrentMap->Usage = MEMORYSEG_LOCKED;
+					*CurrentMap = MEMORYSEG_LOCKED;
 				}
 			}
 			Size++;
@@ -52,9 +51,9 @@ void MemoryMap::Initialise(multiboot_info_t* mbd, MemorySeg* Start, unsigned lon
 		}
 		mmap = (memory_map_t*)((long)mmap + (long)mmap->size + (long)sizeof(unsigned int));
 	}
-	CurrentMap->Usage = MEMORYSEG_EOM;
-	MemorySeg* LoopChk = FindPhyAddr((long*)CurrentMap);
-	for(MemorySeg* Pointer = FindPhyAddr((long*)PhyMemMap); Pointer <= LoopChk; Pointer += 1)  //Setting memory map's memory blocks as in-use
+	*CurrentMap = MEMORYSEG_EOM;
+	char* LoopChk = FindPhyAddr((long*)CurrentMap);
+	for(char* Pointer = FindPhyAddr((long*)PhyMemMap); Pointer <= LoopChk; Pointer += 1)  //Setting memory map's memory blocks as in-use
 	{
 		UsePhyAddr(Pointer, MEMORYSEG_LOCKED);
 	}
@@ -65,7 +64,7 @@ unsigned long MemoryMap::AddrToPos(void* Address)
 	return (unsigned long)(((unsigned long)Address - ((unsigned long)Address % MemorySegSize))/MemorySegSize);
 }
 
-MemorySeg* MemoryMap::FindPhyAddr(void* MemoryAddr)
+char* MemoryMap::FindPhyAddr(void* MemoryAddr)
 {
 	//TODO: Make more efficient
 	if(AddrToPos(MemoryAddr) > Size)
@@ -73,12 +72,12 @@ MemorySeg* MemoryMap::FindPhyAddr(void* MemoryAddr)
 	return (PhyMemMap+AddrToPos(MemoryAddr));
 }
 
-MemorySeg* MemoryMap::FindFreePhyAddr()
+char* MemoryMap::FindFreePhyAddr()
 {
 	//TODO: Make more efficient
-	for(int Pos = 0; PhyMemMap[Pos].Usage != MEMORYSEG_EOM; Pos++)
+	for(int Pos = 0; PhyMemMap[Pos] != MEMORYSEG_EOM; Pos++)
 	{
-		if(PhyMemMap[Pos].Usage == MEMORYSEG_FREE)
+		if(PhyMemMap[Pos] == MEMORYSEG_FREE)
 		{
 			return (PhyMemMap+Pos);
 		}
@@ -88,42 +87,34 @@ MemorySeg* MemoryMap::FindFreePhyAddr()
 
 void* MemoryMap::UseFreePhyAddr(char MemUsage = MEMORYSEG_INUSE)
 {
-	MemorySeg* Block = FindFreePhyAddr();
+	char* Block = FindFreePhyAddr();
 	if(UsePhyAddr(Block, MemUsage) == 0)
 	{
-		return (void*)Block->BaseAddress;
+		return (void*)(((long)Block - (long)PhyMemMap) * 0x1000);
 	}
 	return (void*)0;
 }
 
-int MemoryMap::UsePhyAddr(MemorySeg* MemoryAddr, char MemUsage = MEMORYSEG_INUSE)
+int MemoryMap::UsePhyAddr(char* MemoryAddr, char MemUsage = MEMORYSEG_INUSE)
 {
-	
-	if(AddrToPos(MemoryAddr) >= Size || ((long)MemoryAddr - (long)PhyMemMap) % sizeof(MemorySeg) != 0x00) //Return -1 if MemoryAddr isn't a physical memory map entry
+	if(*MemoryAddr != MEMORYSEG_FREE) //Return the current usage if memory block isn't free
 	{
-		return -1;
+		return *MemoryAddr;
 	}
-	if(MemoryAddr->Usage != MEMORYSEG_FREE) //Return the current usage if memory block isn't free
-	{
-		return MemoryAddr->Usage;
-	}
-	MemoryAddr->Usage = MemUsage;
+	*MemoryAddr = MemUsage;
 	return 0x00; //Return 0 on success
 }
 
-int MemoryMap::FreePhyAddr(MemorySeg* MemoryAddr)
+int MemoryMap::FreePhyAddr(char* MemoryAddr)
 {
 	//TODO: Add check to make sure process isn't freeing another process' frame
-	if(AddrToPos(MemoryAddr) > Size || ((long)MemoryAddr - (long)PhyMemMap) % sizeof(MemorySeg) != 0x00) //Return -1 if MemoryAddr isn't a physical memory map entry
+	if(*MemoryAddr != MEMORYSEG_INUSE || *MemoryAddr != MEMORYSEG_LOCKED) //Return the current usage if memory block isn't in use
 	{
-		return -1;
+		return *MemoryAddr;
 	}
-	if(MemoryAddr->Usage != MEMORYSEG_INUSE || MemoryAddr->Usage != MEMORYSEG_LOCKED) //Return the current usage if memory block isn't in use
-	{
-		return MemoryAddr->Usage;
-	}
-	MemoryAddr->Usage = MEMORYSEG_FREE;
-	for(char* Zero = (char*)MemoryAddr->BaseAddress; Zero <= (char*)MemoryAddr->BaseAddress + 0xFFF; Zero++) // TODO: Replace with queue system that uses downtime to zero blocks
+	*MemoryAddr = MEMORYSEG_FREE;
+	char* Start = (char*)(((long)MemoryAddr - (long)PhyMemMap) * 0x1000);
+	for(char* Zero = Start; Zero <= Start + 0xFFF; Zero++) // TODO: Replace with queue system that uses downtime to zero blocks
 	{
 		*Zero = (long)0x00;
 	}

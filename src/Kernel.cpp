@@ -13,18 +13,7 @@ void Kernel_Panic(const char*);
 #include "Memory/MemoryMap.h"
 #include "Memory/Paging.h"
 
-#ifdef ProcessQ
-#include "Process.h"
-#endif
-#ifdef ProcessPBS
 #include "ProcessPBS.h"
-#endif
-#ifdef ProcessRR
-#include "ProcessRR.h"
-#endif
-#ifdef ProcessMQS
-#include "ProcessMQS.h"
-#endif
 
 #include "Interrupts/IDT.h"
 #include "Definitions.h"
@@ -32,6 +21,7 @@ void Kernel_Panic(const char*);
 #include "Serial.h"
 
 #include "IO.cpp"
+#include "PCI.cpp"
 #include "Miscellaneous/Miscellaneous.cpp"
 #include "Serial.cpp"
 #include "Memory/MemoryMap.cpp"
@@ -39,18 +29,7 @@ void Kernel_Panic(const char*);
 
 #include "Keyboard.cpp"
 
-#ifdef ProcessRR
-#include "ProcessRR.cpp"
-#endif
-#ifdef ProcessQ
-#include "Process.cpp"
-#endif
-#ifdef ProcessPBS
 #include "ProcessPBS.cpp"
-#endif
-#ifdef ProcessMQS
-#include "ProcessMQS.cpp"
-#endif
 
 #include "Memory/Malloc.cpp"
 
@@ -62,6 +41,7 @@ void Kernel_Panic(const char*);
 
 #include "KernelPanic.cpp"
 #include "BasicFunctions.cpp"
+#include "Miscellaneous/String.h"
 
 int Header[12] __attribute__((section (".Multiboot"))) = 
 {
@@ -83,18 +63,6 @@ char* BDA = (char*)0x400;
 PageFile KernelMem; // The kernel memory
 
 #include "KernelInterrupts.cpp"
-#ifdef ProcessRR
-#include "TestProgramsRR.cpp"
-#endif
-#ifdef ProcessQ
-#include "TestProgramsQ.cpp"
-#endif
-#ifdef ProcessPBS
-#include "TestProgramsPBS.cpp"
-#endif
-#ifdef ProcessMQS
-#include "TestProgramsMQS.cpp"
-#endif
 #include "KernelProcesses.cpp"
 
 
@@ -107,7 +75,7 @@ extern "C" void Kernel_Start()
 	Serial.Setup(BDA);
 	SerialLog = SerialQueue();
 	//Setting up memory map
-	PhysMemory.Initialise(mbd, (MemorySeg*)&KernelEnd, 0x1000);
+	PhysMemory.Initialise(mbd, (char*)&KernelEnd, 0x1000);
 	//Setting up IDT
 	IDTPos = (long*)PhysMemory[PhysMemory.Size] + PhysMemory.MemorySegSize;
 	IDT = (IDTStruct*)IDTPos;
@@ -176,12 +144,14 @@ extern "C" void Kernel_Start()
 	memset(&TSS, 0, sizeof(tss_entry));
 	TSS.RSP0 = (unsigned long)StackBase;
 	__asm__("PUSH %RAX; MOV $0x28, %AX; LTR %AX; POP %RAX");
-	for(MemorySeg* Position = PhysMemory.FindPhyAddr((void*)0x0); Position <= PhysMemory.FindPhyAddr(KernelMemoryEnd); Position++)
+	for(char* Position = PhysMemory.FindPhyAddr((void*)0x0); Position <= PhysMemory.FindPhyAddr(KernelMemoryEnd); Position++)
 	{
 		PhysMemory.UsePhyAddr(Position, MEMORYSEG_LOCKED); 
 	}
 	ModelPaging.Pages = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
-	unsigned long FinalSeg = (PhysMemory.EOM() - 1)->BaseAddress;
+	//unsigned long FinalSeg = (PhysMemory.EOM() - 1)->BaseAddress;
+	unsigned long FinalSeg = (((long)(PhysMemory.EOM() - 1) - (long)PhysMemory.PhyMemMap) * 0x1000);
+	Serial.WriteLongHex(0x1, ((long)(PhysMemory.EOM() - 1) - (long)PhysMemory.PhyMemMap));
 	for(unsigned long i = 0; i < FinalSeg; i += 0x1000)
 	{
 		unsigned long AlignedPhyAddr = i & 0xFFFFFFFFFFFFF000;
@@ -209,6 +179,7 @@ extern "C" void Kernel_Start()
 		unsigned short PTIndex = CONVERTFROMPT(i);
 		PETable[PTIndex] = (long)AlignedPhyAddr | 3;
 	}
+	Serial.WriteString(0x1, "\r\nFinalSeg: ");
 	PageFile TempPage;
 	TempPage.Pages = (long*)PhysMemory.UseFreePhyAddr(MEMORYSEG_LOCKED);
 	for(int i = 0; i < 512; i++)
@@ -253,30 +224,14 @@ extern "C" void Kernel_Start()
 	{
 		ProcessList[i].Available = true;
 	}
-	int ID = Process_Make((void*)&SystemIdle, "Idle Process", 1);
+	int ID = Process_Make((void*)&SystemIdle, "Idle Process", 1, true);
 	CurrentThread = GetProcess(ID)->GetThread(0);
-	#ifdef ProcessQ
-	CurrentThread->NextThread = CurrentThread;
-	RoundRobinThread = CurrentThread;
-	#endif
-	#ifdef ProcessRR
-	CurrentThread->NextThread = CurrentThread;
-	#endif
-	#ifdef ProcessMQS
-	CurrentThread->NextThread = CurrentThread;
-	CurrentThreadPeriod = &BackgroundThreadPeriod;
-	CurrentPeriodDuration = &BackgroundThreadDuration;
-	#endif
 	GetProcess(ID)->Start();
-	ID = Process_Make((void*)&Graphics, "Graphics Process", 1);
+	ID = Process_Make((void*)&Graphics, "Graphics Process", 1, true);
 	GetProcess(ID)->Start();
-	ID = Process_Make((void*)&SerialWrite, "Log writer", 1);
+	ID = Process_Make((void*)&SerialWrite, "Log writer", 1, true);
 	GetProcess(ID)->Start();
-	ID = Process_Make((void*)&TaskManager, "Task Manager", 1);
-	GetProcess(ID)->Start();
-	ID = Process_Make((void*)&TestAutomation, "Test Automation", 1);
-	GetProcess(ID)->Start();
-	ID = Process_Make((void*)&Textbox, "Text ewqdwqw", 1);
+	ID = Process_Make((void*)&Textbox, "Textbox", 1, false);
 	GetProcess(ID)->Start();
 	//Enables multitasking and PIT(As well as other IRQs)
 	Output8(PICM_Dat, 0xFC); //0xFC

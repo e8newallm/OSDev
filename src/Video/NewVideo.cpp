@@ -13,6 +13,7 @@ public:
 	unsigned short WindowWidth, WindowHeight, ScreenWidth, ScreenHeight;
 	unsigned short x, y;
 	Pixel* Buffer;
+	Mutex DrawMutex;
 	Pixel* operator()(unsigned int, unsigned int);
 	void DrawPixel(unsigned int, unsigned int, unsigned char, unsigned char, unsigned char);
 	void DrawRect(unsigned int, unsigned int, unsigned int, unsigned int, unsigned char, unsigned char, unsigned char);
@@ -44,14 +45,17 @@ Pixel* Draw::operator()(unsigned int x, unsigned int y)
 
 void Draw::DrawPixel(unsigned int x, unsigned int y, unsigned char r, unsigned char g, unsigned char b)
 {
+	DrawMutex.Lock();
 	Pixel* Pos = (Buffer + ((y * WindowWidth) + x));
 	Pos->Red = r;
 	Pos->Green = g;
 	Pos->Blue = b;
+	DrawMutex.Unlock();
 }
 
 void Draw::DrawRect(unsigned int x, unsigned int y, unsigned int Width, unsigned int Height, unsigned char r, unsigned char g, unsigned char b)
 {
+	DrawMutex.Lock();
 	Pixel* Start = (Buffer + ((y * WindowWidth) + x));
 	for(unsigned int yPos = 0; yPos < Height; yPos++)
 	{	
@@ -63,12 +67,14 @@ void Draw::DrawRect(unsigned int x, unsigned int y, unsigned int Width, unsigned
 		}
 		Start += WindowWidth;
 	}
+	DrawMutex.Unlock();
 }
 
 void Draw::Update() 
 {
 	Pixel* NewFrame = (Pixel*)Buffer;
 	Pixel* MainFrame = (Pixel*)0xA00000;
+	DrawMutex.Lock();
 	VideoBufferMutex.Lock();
 	for(int i = 0, Maini = y; i < WindowHeight; i++)
 	{
@@ -80,6 +86,7 @@ void Draw::Update()
 		Maini++;
 	}
 	VideoBufferMutex.Unlock();
+	DrawMutex.Unlock();
 }
 
 Draw::Draw()
@@ -105,11 +112,13 @@ void Draw::DrawCharacter(unsigned char Character, long x, long y)
 
 void Draw::DrawString(char* String, int Length, long x, long y)
 {
+	DrawMutex.Lock();
 	for(int i = 0; i < Length; i++)
 	{
 		DrawCharacter(String[i], x, y);
 		x += 9;
 	}
+	DrawMutex.Unlock();
 }
 
 void Draw::DrawString(const char* String, int Length, long x, long y)
