@@ -1,9 +1,11 @@
 
+//TODO: ADD DESTRUCTOR WITH FREE
 
 class String
 {
 public:
 	String();
+	~String();
 	String(char*);
 	String(const char*);
 	String operator=(String Equal);
@@ -17,4 +19,3 @@ public:
 	long AllocSize;
 	char* Address;
 };
-#include "String.cpp"

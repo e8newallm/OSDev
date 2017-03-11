@@ -127,42 +127,44 @@ void PageFile::SetupStartMemory()
 
 long PD[] __attribute__((section (".PD")))
 {
-(long)0x87,
-(long)0x200087,
-(long)0x400087,
-(long)0x600087,
-(long)0x800087,
-(long)0xA00087,
-(long)0xC00087,
-(long)0xE00087,
-(long)0x1000087,
-(long)0x1200087,
-(long)0x1400087,
-(long)0x1600087,
-(long)0x1800087,
-(long)0x1A00087,
-(long)0x1C00087,
-(long)0x1E00087,
-(long)0x2000087,
-(long)0x2200087,
-(long)0x2400087,
-(long)0x2600087,
-(long)0x2800087,
-(long)0x2A00087,
-(long)0x2C00087,
-(long)0x2E00087,
-(long)0x3000087,
-(long)0x3200087,
-(long)0x3400087,
-(long)0x3600087,
-(long)0x3800087,
-(long)0x3A00087,
+	(long)0x87,
+	(long)0x200087,
+	(long)0x400087,
+	(long)0x600087,
+	(long)0x800087,
+	(long)0xA00087,
+	(long)0xC00087,
+	(long)0xE00087,
+	(long)0x1000087,
+	(long)0x1200087,
+	(long)0x1400087,
+	(long)0x1600087,
+	(long)0x1800087,
+	(long)0x1A00087,
+	(long)0x1C00087,
+	(long)0x1E00087,
+	(long)0x2000087,
+	(long)0x2200087,
+	(long)0x2400087,
+	(long)0x2600087,
+	(long)0x2800087,
+	(long)0x2A00087,
+	(long)0x2C00087,
+	(long)0x2E00087,
+	(long)0x3000087,
+	(long)0x3200087,
+	(long)0x3400087,
+	(long)0x3600087,
+	(long)0x3800087,
+	(long)0x3A00087,
 };
+
 long PDPT[] __attribute__((section (".PDPT")))
 {
-(long)&PD + (long)0x07
+	(long)&PD + (long)0x07	
 };
+
 long PML4[] __attribute__((section (".PML4"))) =
 {
-(long)&PDPT + (long)0x7
+	(long)&PDPT + (long)0x7
 };

@@ -61,6 +61,19 @@ bool SerialController::WriteString(short COMPort, char* String)
 	return true;
 }
 
+bool SerialController::WriteString(short COMPort, String string)
+{
+	//Lock();
+	unsigned short Port = GetPort(COMPort);
+	for(int Pos = 0; Pos < string.Length; Pos++)
+	{
+		while(PortAvail(Port) == 0);
+		Output8(Port + SerialData, string[Pos]);
+	}
+	//Unlock();
+	return true;
+}
+
 bool SerialController::WriteLongHex(short COMPort, long Value)
 {
 	//Lock();

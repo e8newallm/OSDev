@@ -7,6 +7,7 @@ all:
 	/home/e8newallm/OSDev/CrossCompiler/bin/x86_64-elf-as -o /home/e8newallm/OSDev/tmp/Switch.o -c /home/e8newallm/OSDev/src/Switch.s
 	/home/e8newallm/OSDev/CrossCompiler/bin/x86_64-elf-ld -o /home/e8newallm/OSDev/tmp/Kernel.elf /home/e8newallm/OSDev/tmp/Stage2.o /home/e8newallm/OSDev/tmp/Switch.o /home/e8newallm/OSDev/tmp/Interrupts.o /home/e8newallm/OSDev/tmp/Kernel.o -T /home/e8newallm/OSDev/src/Linker.lin
 	/home/e8newallm/OSDev/CrossCompiler/bin/x86_64-elf-objcopy -O elf32-i386 /home/e8newallm/OSDev/tmp/Kernel.elf /mnt/OSDevMount/Kernel.elf
+	sync
 
 asm:
 	clear
@@ -27,6 +28,7 @@ debug:
 	/home/e8newallm/OSDev/CrossCompiler/bin/x86_64-elf-as -o /home/e8newallm/OSDev/tmp/Switch.o -c /home/e8newallm/OSDev/src/Switch.s
 	/home/e8newallm/OSDev/CrossCompiler/bin/x86_64-elf-ld -o /home/e8newallm/OSDev/tmp/Kernel.elf /home/e8newallm/OSDev/tmp/Stage2.o /home/e8newallm/OSDev/tmp/Switch.o /home/e8newallm/OSDev/tmp/Interrupts.o /home/e8newallm/OSDev/tmp/Kernel.o -T /home/e8newallm/OSDev/src/Linker.lin
 	/home/e8newallm/OSDev/CrossCompiler/bin/x86_64-elf-objcopy -O elf32-i386 /home/e8newallm/OSDev/tmp/Kernel.elf /mnt/OSDevMount/Kernel.elf
+	sync
 
 mount:
 	sudo mount /home/e8newallm/OSDev/VM/OSHDD.vhd /mnt/OSDevMount/
@@ -35,4 +37,4 @@ run:
 	bochs -qf /home/e8newallm/OSDev/VM/BochsConfig
 
 kvm:
-	kvm ../VM/OSHDD.vhd
+	kvm -drive file="../VM/OSHDD.vhd",if=none,id=Disk,format=raw -device ich9-ahci,id=ahci -device ide-drive,drive=Disk,bus=ahci.0

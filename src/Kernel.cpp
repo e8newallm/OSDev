@@ -1,7 +1,4 @@
 #define ProcessPBS
-//#define ProcessQ
-//#define ProcessRR
-//#define ProcessMQS
 
 long TimeSinceStart;
 char TempStack[0x1000];
@@ -18,6 +15,7 @@ void Kernel_Panic(const char*);
 #include "Interrupts/IDT.h"
 #include "Definitions.h"
 #include "HPET.h"
+#include "Miscellaneous/String.h"
 #include "Serial.h"
 
 #include "IO.cpp"
@@ -41,7 +39,7 @@ void Kernel_Panic(const char*);
 
 #include "KernelPanic.cpp"
 #include "BasicFunctions.cpp"
-#include "Miscellaneous/String.h"
+#include "Miscellaneous/String.cpp"
 
 int Header[12] __attribute__((section (".Multiboot"))) = 
 {

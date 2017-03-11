@@ -15,6 +15,7 @@ class SerialController// : protected Mutex
 	void Setup(char*);
 	bool WriteChar(short, char);
 	bool WriteString(short, char*);
+	bool WriteString(short, String);
 	bool WriteString(short, const char*);
 	bool WriteLongHex(short, long);
 	bool WriteLong(short, long);

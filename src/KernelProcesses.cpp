@@ -74,9 +74,21 @@ void WriteLine(char* Message)
 	WriteLine(TextHeight-1, (char*)Message);
 }
 
+void WriteLineNL(char* Message)
+{
+	WriteLine(TextHeight-1, (char*)Message);
+	Newline();
+}
+
 void WriteLine(const char* Message)
 {
 	WriteLine(TextHeight-1, (char*)Message);
+}
+
+void WriteLineNL(const char* Message)
+{
+	WriteLine(TextHeight-1, (char*)Message);
+	Newline();
 }
 
 void WriteLine(int Line, String Message)
@@ -90,6 +102,12 @@ void WriteLine(int Line, String Message)
 void WriteLine(String Message)
 {
 	WriteLine(TextHeight-1, Message);
+}
+
+void WriteLineNL(String Message)
+{
+	WriteLine(TextHeight-1, Message);
+	Newline();
 }
 
 __attribute__((noinline)) void TextboxUpdate()
@@ -150,35 +168,22 @@ __attribute__((noinline)) void Textbox()
 		else if(Key == Key_Enter)
 		{
 			Text[TextHeight-1][Pointer] = 0;
-			
 			if(strcmp(Text[TextHeight-1]+2, "crash") == 0)
 			{
 				asm("hlt");
 			}
 			
-			if(strcmp(Text[TextHeight-1]+2, "tasklist") == 0)
+			else if(strcmp(Text[TextHeight-1]+2, "tasklist") == 0)
 			{
 				Newline();
 				Tasklist();
 			}
 			
-			if(strcmp(Text[TextHeight-1]+2, "pcitest") == 0)
+			else if(strcmp(Text[TextHeight-1]+2, "pcitest") == 0)
 			{
-				Newline();
-				for(int Bus = 0; Bus < 256; Bus++)
-				{
-					for(int Device = 0; Device < 32; Device++)
-					{
-						if(ReadFromPCI(Bus, Device, 0, 0) != 0xFFFFFFFF)
-						{
-							WriteLine("Device found on Bus ");
-							Newline();
-						}
-					}
-				}
 			}
 			
-			if(strcmp(Text[TextHeight-1]+2, "stringtest") == 0)
+			else if(strcmp(Text[TextHeight-1]+2, "stringtest") == 0)
 			{
 				Newline();
 				WriteLine("Testing");
@@ -210,6 +215,13 @@ __attribute__((noinline)) void Textbox()
 				Test = Test + " " + 10;
 				WriteLine(Test);
 				Newline();
+				WriteLineNL(ValueToHexStr(0x12345678) + " " + ValueToHexStr(0x12345678 >> 8) + " " + ValueToHexStr(0x12345678 >> 16));
+			}
+			else
+			{
+				String Temp(Text[TextHeight-1]+2);
+				Newline();
+				WriteLine(Temp + ": Command not found.");
 			}
 			
 			Newline();
@@ -217,7 +229,7 @@ __attribute__((noinline)) void Textbox()
 			Text[TextHeight-1][1] = ' ';
 			Pointer = 2;
 		}
-		else if(IsCharacter(Key) && Pointer < 200)
+		else if(IsCharacter(Key) && Pointer < 90)
 		{
 			Text[TextHeight-1][Pointer++] = Key;
 			Text[TextHeight-1][Pointer] = '_';

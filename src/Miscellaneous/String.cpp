@@ -1,3 +1,4 @@
+
 #define ALLOC_BLOCK_SIZE 20
 
 String::String()
@@ -41,6 +42,11 @@ String::String(const char* String)
 	{
 		Address[i] = String[i];
 	}
+}
+
+String::~String()
+{
+	Free(Address);
 }
 
 char& String::operator[](long Position)
@@ -144,6 +150,58 @@ String String::operator+(long Value)
 	{
 		Temp.Address[Pos+i] = (Value % 10) + '0';
 		Value /= 10;
+	}
+	return Temp;
+}
+
+String operator+(char* First, String Second)
+{
+	char* Pointer = First;
+	String Temp = String();
+	int FirstLength = 0;
+	while(*Pointer != (char)0)
+	{
+		FirstLength++;
+		Pointer++;
+	}
+	Temp.Length = Second.Length + FirstLength;
+	long Allocate = Temp.Length + (ALLOC_BLOCK_SIZE - (Temp.Length % ALLOC_BLOCK_SIZE));
+	Temp.AllocSize = Allocate / ALLOC_BLOCK_SIZE;
+	Temp.Address = (char*)Malloc(Allocate);
+	int Pos = 0;
+	for(int i = 0; i < FirstLength; i++)
+	{
+		Temp.Address[Pos] = First[i];
+		Pos++;
+	}
+	for(int i = 0; i < Second.Length; i++)
+	{
+		Temp.Address[Pos] = Second[i];
+		Pos++;
+	}
+	return Temp;
+}
+
+String operator+(const char* First, String Second)
+{
+	return operator+((char*) First, Second);
+}
+
+String ValueToHexStr(long Value)
+{
+	String Temp = String();
+	Temp.Length = LongDigitsHex(Value) + 2;
+	long Allocate = Temp.Length + (ALLOC_BLOCK_SIZE - (Temp.Length % ALLOC_BLOCK_SIZE));
+	Temp.AllocSize = Allocate / ALLOC_BLOCK_SIZE;
+	Temp.Address = (char*)Malloc(Allocate);
+	int Pos = 0;
+	Temp.Address[0] = '0';
+	Temp.Address[1] = 'x';
+	Temp.Address[2] = '0';
+	for(long i = Temp.Length-1; Value != 0 ; i--)
+	{
+		Temp.Address[Pos+i] = Hex[Value % 16];
+		Value /= 16;
 	}
 	return Temp;
 }

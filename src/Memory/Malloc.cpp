@@ -1,5 +1,6 @@
 #define MallocBucketLimit 0 //4kB or 4MB later
 
+void PrintHeap();
 //Usage
 //0 = Free, 1 = InUse, 254 = Start, 255 = End
 void AddVMemory(unsigned long Size)
@@ -22,7 +23,7 @@ void AddVMemory(unsigned long Size)
 	((CurrentThread->OwnerProcess)->EndBlock)->PrevSize = ((long)(CurrentThread->OwnerProcess)->EndBlock - (long)PrevEnd) - sizeof(MBlockHeader);
 	((CurrentThread->OwnerProcess)->EndBlock)->PrevUsage = MBlockHeader_Free;
 	((CurrentThread->OwnerProcess)->EndBlock)->NextUsage = MBlockHeader_End;
-	
+	//PrintHeap();
 	return;
 }
 
@@ -71,6 +72,9 @@ void PrintHeap()
 
 void* Malloc(unsigned long Size)
 {
+	//Serial.WriteString(0x01, "\r\nMALLOCING FOR SIZE: ");
+	//Serial.WriteLongHex(0x01, Size);
+	//Serial.WriteString(0x01, "\r\n");
 	if(Size == 0)
 		return (void*)0;
 	if(true || Size > MallocBucketLimit) //If Size is too large to be used in the bucket memories
@@ -80,8 +84,18 @@ void* Malloc(unsigned long Size)
 		{
 			if(Check->NextUsage == MBlockHeader_Free && Check->NextSize >= Size)
 			{
-				if(Check->NextSize > Size)
+				//Serial.WriteString(0x01, "1 ");
+				if(Check->NextSize > Size + sizeof(MBlockHeader))
 				{
+
+					/*Serial.WriteString(0x01, "2 ");
+
+					Serial.WriteLongHex(0x01, Check->NextSize);
+					Serial.WriteString(0x01, " + ");
+					Serial.WriteLongHex(0x01, sizeof(MBlockHeader));
+					Serial.WriteString(0x01, " > ");
+					Serial.WriteLongHex(0x01, Size);*/
+
 					Check->NextUsage = MBlockHeader_InUse;
 					MBlockHeader* FinalBlock = (MBlockHeader*)((long)Check + Check->NextSize + sizeof(MBlockHeader));
 					Check->NextSize = Size;
@@ -91,12 +105,15 @@ void* Malloc(unsigned long Size)
 					NextBlock->NextUsage = MBlockHeader_Free;
 					NextBlock->NextSize = ((long)FinalBlock - (long)NextBlock - sizeof(MBlockHeader));
 					FinalBlock->PrevSize = ((long)FinalBlock - (long)NextBlock - sizeof(MBlockHeader));
+					//PrintHeap();
 					return (void*)((long)Check + sizeof(MBlockHeader));
 				}
-				else if(Check->NextSize == Size)
+				else
 				{
+					//Serial.WriteString(0x01, "3 ");
 					Check->NextUsage = MBlockHeader_InUse;
 					((MBlockHeader*)((long)Check + Check->NextSize + sizeof(MBlockHeader)))->PrevUsage = MBlockHeader_InUse;
+					//PrintHeap();
 					return (void*)((long)Check + sizeof(MBlockHeader));
 				}
 			}
@@ -105,12 +122,22 @@ void* Malloc(unsigned long Size)
 				if(Check->PrevUsage == MBlockHeader_Free)
 					Check = (MBlockHeader*)((long)Check - Check->PrevSize - sizeof(MBlockHeader));
 				//PrintHeap();
+				/*Serial.WriteString(0x01, "4 ");
+				Serial.WriteString(0x01, "NEXTUSAGE(");
+				Serial.WriteLong(0x01, Check->NextUsage);
+				Serial.WriteString(0x01, ")");
+				Serial.WriteString(0x01, "\r\nNEED TO MAP MEM");*/
 				MapVirtualMem(Size);
 				//PrintHeap();
 			}
 			else
 			{
 				Check = (MBlockHeader*)((long)Check + Check->NextSize + sizeof(MBlockHeader));
+				/*Serial.WriteString(0x01, "5 ");
+				Serial.WriteString(0x01, "NEXTUSAGE(");
+				Serial.WriteLong(0x01, Check->NextUsage);
+				Serial.WriteString(0x01, ")");*/
+				
 			}
 		}
 	}
@@ -132,4 +159,5 @@ void Free(void* Pointer)
 	FirstBlock->NextUsage = MBlockHeader_Free;
 	LastBlock->PrevSize = (long)LastBlock - (long)FirstBlock - sizeof(MBlockHeader);
 	LastBlock->PrevUsage = MBlockHeader_Free;
+	//PrintHeap();
 }
